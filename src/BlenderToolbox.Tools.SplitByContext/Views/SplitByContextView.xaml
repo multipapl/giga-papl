@@ -1,0 +1,148 @@
+<UserControl x:Class="BlenderToolbox.Tools.SplitByContext.Views.SplitByContextView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d">
+    <ScrollViewer VerticalScrollBarVisibility="Auto"
+                  HorizontalScrollBarVisibility="Disabled">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <Border Style="{StaticResource PanelCardStyle}">
+                <StackPanel>
+                    <TextBlock Style="{StaticResource SectionTitleTextStyle}"
+                               Text="Inputs" />
+                    <TextBlock Margin="0,6,0,0"
+                               Style="{StaticResource HelperTextStyle}"
+                               Text="Choose the executable and the source .blend file. The split runs headlessly and writes one output file per active context." />
+
+                    <Grid Margin="0,16,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="150" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+
+                        <TextBlock Grid.Row="0"
+                                   Grid.Column="0"
+                                   Margin="0,8,0,0"
+                                   Style="{StaticResource FieldLabelTextStyle}"
+                                   Text="Executable path" />
+                        <Grid Grid.Row="0"
+                              Grid.Column="1">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+
+                            <TextBox Grid.Column="0"
+                                     Margin="0,0,12,0"
+                                     Text="{Binding ExecutablePath, UpdateSourceTrigger=PropertyChanged}" />
+                            <Button Grid.Column="1"
+                                    MinWidth="92"
+                                    Style="{StaticResource SecondaryButtonStyle}"
+                                    Command="{Binding BrowseExecutableCommand}"
+                                    Content="Browse" />
+                        </Grid>
+
+                        <TextBlock Grid.Row="1"
+                                   Grid.Column="0"
+                                   Margin="0,22,0,0"
+                                   Style="{StaticResource FieldLabelTextStyle}"
+                                   Text="Scene file" />
+                        <Grid Grid.Row="1"
+                              Grid.Column="1"
+                              Margin="0,14,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+
+                            <TextBox Grid.Column="0"
+                                     Margin="0,0,12,0"
+                                     Text="{Binding SceneFilePath, UpdateSourceTrigger=PropertyChanged}" />
+                            <Button Grid.Column="1"
+                                    MinWidth="92"
+                                    Style="{StaticResource SecondaryButtonStyle}"
+                                    Command="{Binding BrowseSceneFileCommand}"
+                                    Content="Browse" />
+                        </Grid>
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <Border Grid.Row="1"
+                    Margin="0,12,0,0"
+                    Style="{StaticResource PanelCardStyle}">
+                <StackPanel>
+                    <TextBlock Style="{StaticResource SectionTitleTextStyle}"
+                               Text="Output" />
+                    <TextBlock Margin="0,6,0,0"
+                               Style="{StaticResource HelperTextStyle}"
+                               Text="Each saved file uses the active camera name for the context. The process log is written locally so failures are easy to inspect." />
+
+                    <Grid Margin="0,16,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="150" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+
+                        <TextBlock Grid.Row="0"
+                                   Grid.Column="0"
+                                   Margin="0,8,0,0"
+                                   Style="{StaticResource FieldLabelTextStyle}"
+                                   Text="Status" />
+                        <TextBlock Grid.Row="0"
+                                   Grid.Column="1"
+                                   Margin="0,8,0,0"
+                                   Style="{StaticResource StatusMessageTextStyle}"
+                                   Tag="{Binding StatusTone}"
+                                   Text="{Binding StatusMessage}" />
+
+                        <TextBlock Grid.Row="1"
+                                   Grid.Column="0"
+                                   Margin="0,22,0,0"
+                                   Style="{StaticResource FieldLabelTextStyle}"
+                                   Text="Log file" />
+                        <TextBlock Grid.Row="1"
+                                   Grid.Column="1"
+                                   Margin="0,22,0,0"
+                                   Style="{StaticResource HelperTextStyle}"
+                                   Text="{Binding LogFilePath}" />
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <Grid Grid.Row="2"
+                  Margin="0,12,0,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="16" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <TextBlock Grid.Column="0"
+                           VerticalAlignment="Center"
+                           Style="{StaticResource HelperTextStyle}"
+                           Text="This tool mirrors the reference behavior: it runs a headless split and writes one file per active context." />
+                <Button Grid.Column="2"
+                        MinWidth="180"
+                        Style="{StaticResource PrimaryButtonStyle}"
+                        Command="{Binding SplitCommand}"
+                        Content="Split by context" />
+            </Grid>
+        </Grid>
+    </ScrollViewer>
+</UserControl>

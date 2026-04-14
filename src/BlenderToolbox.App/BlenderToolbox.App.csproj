@@ -1,0 +1,21 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\BlenderToolbox.Core\BlenderToolbox.Core.csproj" />
+    <ProjectReference Include="..\BlenderToolbox.Tools.LazyFrameRename\BlenderToolbox.Tools.LazyFrameRename.csproj" />
+    <ProjectReference Include="..\BlenderToolbox.Tools.SplitByContext\BlenderToolbox.Tools.SplitByContext.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+  </PropertyGroup>
+
+</Project>

@@ -1,0 +1,11 @@
+bin/
+obj/
+.vs/
+TestResults/
+_ref/
+docs/
+publish/
+*.user
+*.suo
+*.log
+
