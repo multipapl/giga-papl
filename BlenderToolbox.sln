@@ -15,6 +15,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BlenderToolbox.Core.Tests",
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BlenderToolbox.Tools.SplitByContext", "src\BlenderToolbox.Tools.SplitByContext\BlenderToolbox.Tools.SplitByContext.csproj", "{1319A363-C131-4559-A0A5-4317EE13290D}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BlenderToolbox.Tools.RenderManager", "src\BlenderToolbox.Tools.RenderManager\BlenderToolbox.Tools.RenderManager.csproj", "{2D7B4F5E-4A0E-47B2-9B10-74B9F94D3F12}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -85,6 +87,18 @@ Global
 		{1319A363-C131-4559-A0A5-4317EE13290D}.Release|x64.Build.0 = Release|Any CPU
 		{1319A363-C131-4559-A0A5-4317EE13290D}.Release|x86.ActiveCfg = Release|Any CPU
 		{1319A363-C131-4559-A0A5-4317EE13290D}.Release|x86.Build.0 = Release|Any CPU
+		{2D7B4F5E-4A0E-47B2-9B10-74B9F94D3F12}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{2D7B4F5E-4A0E-47B2-9B10-74B9F94D3F12}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{2D7B4F5E-4A0E-47B2-9B10-74B9F94D3F12}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{2D7B4F5E-4A0E-47B2-9B10-74B9F94D3F12}.Debug|x64.Build.0 = Debug|Any CPU
+		{2D7B4F5E-4A0E-47B2-9B10-74B9F94D3F12}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{2D7B4F5E-4A0E-47B2-9B10-74B9F94D3F12}.Debug|x86.Build.0 = Debug|Any CPU
+		{2D7B4F5E-4A0E-47B2-9B10-74B9F94D3F12}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{2D7B4F5E-4A0E-47B2-9B10-74B9F94D3F12}.Release|Any CPU.Build.0 = Release|Any CPU
+		{2D7B4F5E-4A0E-47B2-9B10-74B9F94D3F12}.Release|x64.ActiveCfg = Release|Any CPU
+		{2D7B4F5E-4A0E-47B2-9B10-74B9F94D3F12}.Release|x64.Build.0 = Release|Any CPU
+		{2D7B4F5E-4A0E-47B2-9B10-74B9F94D3F12}.Release|x86.ActiveCfg = Release|Any CPU
+		{2D7B4F5E-4A0E-47B2-9B10-74B9F94D3F12}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -95,5 +109,6 @@ Global
 		{3093DD6A-5490-4BC4-AC27-ABEAC328AACE} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{79C2A09D-A0E5-437C-8873-967157B08984} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{1319A363-C131-4559-A0A5-4317EE13290D} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
+		{2D7B4F5E-4A0E-47B2-9B10-74B9F94D3F12} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 	EndGlobalSection
 EndGlobal

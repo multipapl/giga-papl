@@ -3,6 +3,7 @@
   <ItemGroup>
     <ProjectReference Include="..\BlenderToolbox.Core\BlenderToolbox.Core.csproj" />
     <ProjectReference Include="..\BlenderToolbox.Tools.LazyFrameRename\BlenderToolbox.Tools.LazyFrameRename.csproj" />
+    <ProjectReference Include="..\BlenderToolbox.Tools.RenderManager\BlenderToolbox.Tools.RenderManager.csproj" />
     <ProjectReference Include="..\BlenderToolbox.Tools.SplitByContext\BlenderToolbox.Tools.SplitByContext.csproj" />
   </ItemGroup>
 

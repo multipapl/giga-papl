@@ -40,9 +40,13 @@ public sealed class JsonSettingsStore : IJsonSettingsStore
 
     public void Save<T>(string fileName, T settings)
     {
-        Directory.CreateDirectory(_settingsDirectory);
-
         var path = GetSettingsPath(fileName);
+        var directory = Path.GetDirectoryName(path);
+        if (!string.IsNullOrWhiteSpace(directory))
+        {
+            Directory.CreateDirectory(directory);
+        }
+
         using var stream = File.Create(path);
         JsonSerializer.Serialize(stream, settings, SerializerOptions);
     }

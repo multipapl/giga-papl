@@ -3,6 +3,7 @@ using BlenderToolbox.App.Services;
 using BlenderToolbox.App.ViewModels;
 using BlenderToolbox.Core.Services;
 using BlenderToolbox.Tools.LazyFrameRename;
+using BlenderToolbox.Tools.RenderManager;
 using BlenderToolbox.Tools.SplitByContext;
 
 namespace BlenderToolbox.App;
@@ -20,6 +21,7 @@ public partial class MainWindow : Window
         DataContext = new MainWindowViewModel(
         [
             new LazyFrameRenameTool(settingsStore, folderPickerService),
+            new RenderManagerTool(settingsStore, filePickerService),
             new SplitByContextTool(settingsStore, filePickerService),
         ]);
     }

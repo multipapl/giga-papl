@@ -90,6 +90,8 @@
             </Border>
 
             <ContentControl Grid.Row="2"
+                            HorizontalContentAlignment="Stretch"
+                            VerticalContentAlignment="Stretch"
                             Content="{Binding SelectedTool.View}" />
         </Grid>
     </Grid>
