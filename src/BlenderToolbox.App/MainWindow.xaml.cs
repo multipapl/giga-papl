@@ -20,8 +20,8 @@ public partial class MainWindow : Window
 
         DataContext = new MainWindowViewModel(
         [
-            new LazyFrameRenameTool(settingsStore, folderPickerService),
             new RenderManagerTool(settingsStore, filePickerService),
+            new LazyFrameRenameTool(settingsStore, folderPickerService),
             new SplitByContextTool(settingsStore, filePickerService),
         ]);
     }

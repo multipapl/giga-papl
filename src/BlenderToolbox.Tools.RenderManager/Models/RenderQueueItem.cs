@@ -10,6 +10,8 @@ public sealed class RenderQueueItem
 
     public string CollectionOverrides { get; set; } = string.Empty;
 
+    public double CompletedFrameRenderSeconds { get; set; }
+
     public string ElapsedText { get; set; } = string.Empty;
 
     public string EndFrame { get; set; } = string.Empty;
@@ -24,9 +26,13 @@ public sealed class RenderQueueItem
 
     public DateTimeOffset? LastCompletedUtc { get; set; }
 
+    public int LastCompletedFrameNumber { get; set; }
+
     public string LastErrorSummary { get; set; } = string.Empty;
 
     public string LastKnownOutputPath { get; set; } = string.Empty;
+
+    public int LastReportedFrameNumber { get; set; }
 
     public DateTimeOffset? LastStartedUtc { get; set; }
 
@@ -43,6 +49,8 @@ public sealed class RenderQueueItem
     public double ProgressValue { get; set; }
 
     public string ProgressText { get; set; } = "Waiting";
+
+    public int ResumeCompletedFrameCount { get; set; }
 
     public string SceneName { get; set; } = string.Empty;
 

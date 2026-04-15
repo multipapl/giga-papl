@@ -598,7 +598,7 @@ The first release is successful if:
 
 Date: `2026-04-15`
 
-An initial `Render Manager` shell now exists in the repo, but it is still an internal checkpoint rather than a usable release candidate.
+`Render Manager` is now a working in-repo tool with real Blender process execution.
 
 What the current implementation already covers:
 
@@ -606,19 +606,22 @@ What the current implementation already covers:
 - shell registration
 - persisted settings
 - persisted queue
-- draft queue actions
-- draft progress state
-- draft `Start / Stop / Resume` shell interaction
-- command preview and log placeholders
+- queue actions for add, duplicate, reset, remove, reorder, and enable or disable
+- real `Start / Stop / Resume` process execution
+- command preview and live log output
+- parsed per-job frame progress
+- queue-wide discrete progress by finished jobs
+- whole-job ETA based on average completed frame time
+- resume from the current or next frame instead of restarting the whole job
 
 What is still not at release quality:
 
-- the layout and visual hierarchy are still rough
-- some controls still clip, overlap, or size poorly in the default window state
-- queue presentation is not yet robust enough for production use
-- runtime behavior is still placeholder state, not actual Blender execution
+- blend inspection is still not implemented
+- camera, view layer, and collection override fields are not yet applied to the Blender command
+- old saved queue entries may not contain newer runtime fields until they are rerun
+- UI polish and documentation still need cleanup passes
 
 Practical implication:
 
-- the repo now has a concrete shell and state model to build on
-- the next implementation step should prioritize UI stabilization before moving deeper into Blender integration
+- the tool is usable for local queue rendering and iteration
+- the next implementation steps should focus on metadata inspection, override application, and cleanup

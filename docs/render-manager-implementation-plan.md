@@ -564,8 +564,7 @@ Only after that should we start implementing Blender inspection and render execu
 
 Date: `2026-04-15`
 
-The repo now contains an in-progress `Milestone 1` implementation of `Render Manager`.
-This is not yet a stable or acceptable daily-use UI, but the shell work is now materially underway.
+The repo now contains a working `Render Manager` tool rather than only a `Milestone 1` shell.
 
 Implemented so far:
 
@@ -578,35 +577,37 @@ Implemented so far:
   - add blend
   - add empty job
   - duplicate
+  - reset
   - remove
   - move up and down
   - enable or disable
-- draft `Start / Stop / Resume` shell-state behavior
-- draft global progress and per-job progress UI state
-- command preview and log panel placeholders
+- real `Start / Stop / Resume` render execution
+- live command preview and log panel
+- parsed per-job frame progress
+- queue-wide progress by finished jobs
+- whole-job ETA based on average completed frame time
+- resume from the stopped frame instead of restarting the whole animation
 
 Current limitations and known issues:
 
-- the current WPF layout is still unstable and visually incorrect
-- queue rows, toolbar density, and right-side editor still need substantial UX cleanup
-- the current `Start / Stop / Resume` behavior is only shell state, not real Blender execution
+- blend inspection is still not implemented
+- camera, view layer, and collection override fields are not yet passed through to Blender
 - `Add Blend` currently uses single-file picker behavior, not multi-select
-- progress values are placeholder shell state, not parsed Blender output
-- no real blend inspection is implemented yet
-- no real render orchestration is implemented yet
+- old saved queue items may not contain all newer runtime fields until they are rerun
+- the UI still needs cleanup and documentation polish
 
 Conclusion:
 
-- `Milestone 1` should be considered partially implemented
-- persistence and basic queue domain are in place
-- the UI still requires dedicated stabilization work before `Milestone 1` can be called done
+- the tool has moved past shell-only status
+- core local rendering behavior is in place
+- the next work should focus on override support, inspection, and cleanup
 
 ## Recommended Next Actions
 
-Before starting `Milestone 2`, finish the remaining `Milestone 1` cleanup:
+Recommended next work:
 
-1. rebuild the queue area using a more reliable tabular control or stronger row layout constraints
-2. simplify and tighten the right-side editor layout so fields do not clip or overlap
-3. normalize toolbar sizing and wrapping behavior at the default window size
-4. validate restored-window layout without requiring maximize
-5. only after the shell is visually stable, move on to blend inspection and process execution
+1. implement blend inspection and populate scene metadata
+2. pass camera, view layer, and collection overrides into actual Blender execution
+3. decide whether `Add Blend` should support multi-select
+4. continue UI cleanup and documentation updates
+5. expand tests around orchestration and queue persistence

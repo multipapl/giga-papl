@@ -35,10 +35,10 @@
 
                 <StackPanel>
                     <TextBlock Style="{StaticResource SidebarTitleTextStyle}"
-                               Text="Toolbox" />
+                               Text="Giga Papl" />
                     <TextBlock Margin="0,8,0,0"
                                Style="{StaticResource HelperTextStyle}"
-                               Text="Compact desktop tools for file, render, and batch tasks."
+                               Text="Compact desktop tools for render, file, and batch tasks."
                                />
                 </StackPanel>
 
@@ -65,7 +65,7 @@
                 <TextBlock Grid.Row="3"
                            Margin="0,12,0,0"
                            Style="{StaticResource HelperTextStyle}"
-                           Text="Phase 1: shell + first migration."
+                           Text="Local Blender workflow tools."
                            />
             </Grid>
         </Border>

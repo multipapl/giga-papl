@@ -23,6 +23,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\BlenderToolbox.Core\BlenderToolbox.Core.csproj" />
     <ProjectReference Include="..\..\src\BlenderToolbox.Tools.LazyFrameRename\BlenderToolbox.Tools.LazyFrameRename.csproj" />
+    <ProjectReference Include="..\..\src\BlenderToolbox.Tools.RenderManager\BlenderToolbox.Tools.RenderManager.csproj" />
     <ProjectReference Include="..\..\src\BlenderToolbox.Tools.SplitByContext\BlenderToolbox.Tools.SplitByContext.csproj" />
   </ItemGroup>
 

@@ -26,6 +26,7 @@ public partial class RenderQueueItemViewModel : ObservableObject
         CameraName = item.CameraName;
         ViewLayerName = item.ViewLayerName;
         CollectionOverrides = item.CollectionOverrides;
+        CompletedFrameRenderSeconds = item.CompletedFrameRenderSeconds;
         OutputPathTemplate = item.OutputPathTemplate;
         OutputFileNameTemplate = item.OutputFileNameTemplate;
         ExtraArgs = item.ExtraArgs;
@@ -34,6 +35,9 @@ public partial class RenderQueueItemViewModel : ObservableObject
         ProgressText = item.ProgressText;
         ElapsedText = item.ElapsedText;
         EtaText = item.EtaText;
+        ResumeCompletedFrameCount = item.ResumeCompletedFrameCount;
+        LastReportedFrameNumber = item.LastReportedFrameNumber;
+        LastCompletedFrameNumber = item.LastCompletedFrameNumber;
         LastKnownOutputPath = item.LastKnownOutputPath;
         LastErrorSummary = item.LastErrorSummary;
         LogOutput = item.LogOutput;
@@ -60,6 +64,12 @@ public partial class RenderQueueItemViewModel : ObservableObject
         RenderMode.SingleFrame => $"Frame {DisplayValue(SingleFrame)}",
         _ => "Mode pending",
     };
+
+    public bool IsAnimationMode => Mode == RenderMode.Animation;
+
+    public bool IsFrameRangeMode => Mode == RenderMode.FrameRange;
+
+    public bool IsSingleFrameMode => Mode == RenderMode.SingleFrame;
 
     public string ProgressPercentLabel => $"{ProgressValue:0}%";
 
@@ -100,18 +110,17 @@ public partial class RenderQueueItemViewModel : ObservableObject
             ? "New render job"
             : Path.GetFileNameWithoutExtension(blendFilePath);
 
-        return new RenderQueueItemViewModel
+        var job = new RenderQueueItemViewModel
         {
             Name = fileName,
             BlendFilePath = blendFilePath,
             BlenderExecutablePath = defaultBlenderPath,
             OutputPathTemplate = defaultOutputPathTemplate,
             OutputFileNameTemplate = defaultOutputFileNameTemplate,
-            ProgressValue = 0,
-            ProgressText = "Waiting",
-            LogOutput = $"[{DateTimeOffset.Now:yyyy-MM-dd HH:mm:ss}] Queue item created.{Environment.NewLine}Milestone 1 shell is ready. Blend inspection, command execution, and live logs land in the next milestones.",
-            Status = string.IsNullOrWhiteSpace(blendFilePath) ? RenderJobStatus.Pending : RenderJobStatus.Ready,
         };
+
+        job.ResetRuntimeState("Queue item created.");
+        return job;
     }
 
     public static RenderQueueItemViewModel FromModel(RenderQueueItem item)
@@ -124,15 +133,28 @@ public partial class RenderQueueItemViewModel : ObservableObject
         var duplicate = ToModel();
         duplicate.Id = Guid.NewGuid().ToString("N");
         duplicate.Name = $"{EffectiveName} Copy";
-        duplicate.ProgressValue = 0;
-        duplicate.ProgressText = "Waiting";
-        duplicate.Status = RenderJobStatus.Pending;
-        duplicate.LogOutput = $"[{DateTimeOffset.Now:yyyy-MM-dd HH:mm:ss}] Queue item duplicated from {EffectiveName}.{Environment.NewLine}Milestone 1 shell only persists queue state; real render session logs will appear here later.";
-        duplicate.LastStartedUtc = null;
-        duplicate.LastCompletedUtc = null;
-        duplicate.LastErrorSummary = string.Empty;
+        var duplicateViewModel = FromModel(duplicate);
+        duplicateViewModel.ResetRuntimeState($"Queue item duplicated from {EffectiveName}.");
+        duplicateViewModel.Status = RenderJobStatus.Pending;
+        return duplicateViewModel;
+    }
 
-        return FromModel(duplicate);
+    public void ResetRuntimeState(string? lifecycleMessage = null)
+    {
+        ProgressValue = 0;
+        ProgressText = "Waiting";
+        ElapsedText = string.Empty;
+        EtaText = string.Empty;
+        LastKnownOutputPath = string.Empty;
+        LastErrorSummary = string.Empty;
+        CompletedFrameRenderSeconds = 0;
+        ResumeCompletedFrameCount = 0;
+        LastReportedFrameNumber = 0;
+        LastCompletedFrameNumber = 0;
+        LastStartedUtc = null;
+        LastCompletedUtc = null;
+        LogOutput = BuildLifecycleLog(lifecycleMessage ?? "Queue item reset.");
+        Status = GetInitialStatus(BlendFilePath);
     }
 
     public RenderQueueItem ToModel()
@@ -153,6 +175,7 @@ public partial class RenderQueueItemViewModel : ObservableObject
             CameraName = CameraName.Trim(),
             ViewLayerName = ViewLayerName.Trim(),
             CollectionOverrides = CollectionOverrides.Trim(),
+            CompletedFrameRenderSeconds = CompletedFrameRenderSeconds,
             OutputPathTemplate = OutputPathTemplate.Trim(),
             OutputFileNameTemplate = OutputFileNameTemplate.Trim(),
             ExtraArgs = ExtraArgs.Trim(),
@@ -161,6 +184,9 @@ public partial class RenderQueueItemViewModel : ObservableObject
             ProgressText = ProgressText.Trim(),
             ElapsedText = ElapsedText.Trim(),
             EtaText = EtaText.Trim(),
+            ResumeCompletedFrameCount = ResumeCompletedFrameCount,
+            LastReportedFrameNumber = LastReportedFrameNumber,
+            LastCompletedFrameNumber = LastCompletedFrameNumber,
             LastKnownOutputPath = LastKnownOutputPath.Trim(),
             LastErrorSummary = LastErrorSummary.Trim(),
             LogOutput = LogOutput ?? string.Empty,
@@ -180,6 +206,9 @@ public partial class RenderQueueItemViewModel : ObservableObject
 
     [ObservableProperty]
     private string collectionOverrides = string.Empty;
+
+    [ObservableProperty]
+    private double completedFrameRenderSeconds;
 
     [ObservableProperty]
     private string elapsedText = string.Empty;
@@ -203,10 +232,16 @@ public partial class RenderQueueItemViewModel : ObservableObject
     private DateTimeOffset? lastCompletedUtc;
 
     [ObservableProperty]
+    private int lastCompletedFrameNumber;
+
+    [ObservableProperty]
     private string lastErrorSummary = string.Empty;
 
     [ObservableProperty]
     private string lastKnownOutputPath = string.Empty;
+
+    [ObservableProperty]
+    private int lastReportedFrameNumber;
 
     [ObservableProperty]
     private DateTimeOffset? lastStartedUtc;
@@ -231,6 +266,9 @@ public partial class RenderQueueItemViewModel : ObservableObject
 
     [ObservableProperty]
     private string progressText = "Waiting";
+
+    [ObservableProperty]
+    private int resumeCompletedFrameCount;
 
     [ObservableProperty]
     private string sceneName = string.Empty;
@@ -270,6 +308,9 @@ public partial class RenderQueueItemViewModel : ObservableObject
     partial void OnModeChanged(RenderMode value)
     {
         OnPropertyChanged(nameof(FrameSummary));
+        OnPropertyChanged(nameof(IsAnimationMode));
+        OnPropertyChanged(nameof(IsFrameRangeMode));
+        OnPropertyChanged(nameof(IsSingleFrameMode));
     }
 
     partial void OnNameChanged(string value)
@@ -310,5 +351,17 @@ public partial class RenderQueueItemViewModel : ObservableObject
     private static string DisplayValue(string? value, string fallback = "Auto")
     {
         return string.IsNullOrWhiteSpace(value) ? fallback : value.Trim();
+    }
+
+    private static RenderJobStatus GetInitialStatus(string? blendFilePath)
+    {
+        return string.IsNullOrWhiteSpace(blendFilePath)
+            ? RenderJobStatus.Pending
+            : RenderJobStatus.Ready;
+    }
+
+    private static string BuildLifecycleLog(string message)
+    {
+        return $"[{DateTimeOffset.Now:yyyy-MM-dd HH:mm:ss}] {message}";
     }
 }

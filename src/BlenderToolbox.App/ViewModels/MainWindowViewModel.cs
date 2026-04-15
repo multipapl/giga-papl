@@ -15,8 +15,8 @@ public partial class MainWindowViewModel : ObservableObject
     public ObservableCollection<IToolDefinition> Tools { get; }
 
     public string WindowTitle => SelectedTool is null
-        ? "Toolbox"
-        : $"Toolbox - {SelectedTool.DisplayName}";
+        ? "Giga Papl"
+        : $"Giga Papl - {SelectedTool.DisplayName}";
 
     [ObservableProperty]
     private IToolDefinition? selectedTool;

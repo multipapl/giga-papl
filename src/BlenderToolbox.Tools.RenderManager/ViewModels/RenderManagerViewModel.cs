@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.IO;
 using BlenderToolbox.Core.Abstractions;
 using BlenderToolbox.Core.Presentation;
@@ -16,6 +17,9 @@ public partial class RenderManagerViewModel : ObservableObject
     private readonly IFilePickerService _filePickerService;
     private readonly RenderQueueStore _queueStore;
     private readonly RenderManagerSettingsStore _settingsStore;
+    private readonly SynchronizationContext _uiContext;
+    private CancellationTokenSource? _renderCts;
+    private int _framesCompleted;
 
     public RenderManagerViewModel(
         RenderManagerSettingsStore settingsStore,
@@ -25,12 +29,13 @@ public partial class RenderManagerViewModel : ObservableObject
         _settingsStore = settingsStore;
         _queueStore = queueStore;
         _filePickerService = filePickerService;
+        _uiContext = SynchronizationContext.Current ?? new SynchronizationContext();
 
         Jobs.CollectionChanged += OnJobsCollectionChanged;
 
         LoadState();
         RefreshComputedState();
-        SetStatus("Render Manager shell is ready. The layout now tracks per-job and queue-wide progress.", StatusTone.Neutral);
+        SetStatus("Render Manager ready.", StatusTone.Neutral);
     }
 
     public ObservableCollection<RenderQueueItemViewModel> Jobs { get; } = [];
@@ -51,7 +56,8 @@ public partial class RenderManagerViewModel : ObservableObject
                 return 0;
             }
 
-            return enabledJobs.Average(static job => job.ProgressValue);
+            var finishedJobs = enabledJobs.Count(job => IsQueueJobFinished(job.Status));
+            return (double)finishedJobs / enabledJobs.Count * 100;
         }
     }
 
@@ -65,8 +71,8 @@ public partial class RenderManagerViewModel : ObservableObject
                 return "No enabled jobs in the queue yet.";
             }
 
-            var completedJobCount = Jobs.Count(job => job.IsEnabled && job.ProgressValue >= 100);
-            return $"{completedJobCount}/{enabledJobCount} completed | {GlobalProgressValue:0}% queue progress";
+            var finishedJobCount = Jobs.Count(job => job.IsEnabled && IsQueueJobFinished(job.Status));
+            return $"{finishedJobCount}/{enabledJobCount} jobs finished | {GlobalProgressValue:0}% queue progress";
         }
     }
 
@@ -105,13 +111,10 @@ public partial class RenderManagerViewModel : ObservableObject
     public string SelectedJobCommandPreview => BuildCommandPreview(SelectedJob);
 
     public string SelectedJobLogOutput => string.IsNullOrWhiteSpace(SelectedJob?.LogOutput)
-        ? "Render logs will appear here once process execution is wired in a later milestone."
+        ? "Render logs will appear here when a job runs."
         : SelectedJob.LogOutput;
 
     public string SelectedJobTitle => SelectedJob?.EffectiveName ?? "Select a queue item";
-
-    [ObservableProperty]
-    private bool autoInspectOnAdd = true;
 
     [ObservableProperty]
     private string defaultBlenderPath = string.Empty;
@@ -143,6 +146,7 @@ public partial class RenderManagerViewModel : ObservableObject
     [NotifyCanExecuteChangedFor(nameof(DuplicateSelectedJobCommand))]
     [NotifyCanExecuteChangedFor(nameof(MoveSelectedJobDownCommand))]
     [NotifyCanExecuteChangedFor(nameof(MoveSelectedJobUpCommand))]
+    [NotifyCanExecuteChangedFor(nameof(ResetSelectedJobCommand))]
     [NotifyCanExecuteChangedFor(nameof(RemoveSelectedJobCommand))]
     [NotifyCanExecuteChangedFor(nameof(ToggleSelectedJobEnabledCommand))]
     [NotifyCanExecuteChangedFor(nameof(UseDefaultBlenderForSelectedJobCommand))]
@@ -158,7 +162,6 @@ public partial class RenderManagerViewModel : ObservableObject
     {
         var settings = new RenderManagerSettings
         {
-            AutoInspectOnAdd = AutoInspectOnAdd,
             DefaultBlenderPath = DefaultBlenderPath.Trim(),
             DefaultOutputPathTemplate = DefaultOutputPathTemplate.Trim(),
             DefaultOutputFileNameTemplate = DefaultOutputFileNameTemplate.Trim(),
@@ -218,13 +221,6 @@ public partial class RenderManagerViewModel : ObservableObject
             DefaultBlenderPath,
             DefaultOutputPathTemplate,
             DefaultOutputFileNameTemplate);
-
-        if (AutoInspectOnAdd)
-        {
-            job.Status = RenderJobStatus.Inspecting;
-            job.ProgressText = "Queued for auto-inspection";
-            AppendLog(job, "Auto-inspection is enabled and will be wired to a real Blender probe in Milestone 2.");
-        }
 
         Jobs.Add(job);
         SelectedJob = job;
@@ -306,6 +302,19 @@ public partial class RenderManagerViewModel : ObservableObject
         SetStatus($"Duplicated {duplicate.EffectiveName}.", StatusTone.Success);
     }
 
+    [RelayCommand(CanExecute = nameof(CanResetSelectedJob))]
+    private void ResetSelectedJob()
+    {
+        if (SelectedJob is null)
+        {
+            return;
+        }
+
+        SelectedJob.ResetRuntimeState();
+        SetStatus($"Reset {SelectedJob.EffectiveName}.", StatusTone.Success);
+        RefreshComputedState();
+    }
+
     [RelayCommand(CanExecute = nameof(CanMoveSelectedJobDown))]
     private void MoveSelectedJobDown()
     {
@@ -346,6 +355,7 @@ public partial class RenderManagerViewModel : ObservableObject
 
         if (removedJob.Status == RenderJobStatus.Rendering)
         {
+            _renderCts?.Cancel();
             IsQueueRunning = false;
         }
 
@@ -373,11 +383,11 @@ public partial class RenderManagerViewModel : ObservableObject
     {
         if (IsQueueRunning)
         {
-            StopQueueShell();
+            StopQueue();
             return;
         }
 
-        StartOrResumeQueueShell();
+        StartOrResumeQueue();
     }
 
     [RelayCommand(CanExecute = nameof(CanOperateOnSelectedJob))]
@@ -392,6 +402,483 @@ public partial class RenderManagerViewModel : ObservableObject
         SetStatus($"Applied the default Blender executable to {SelectedJob.EffectiveName}.", StatusTone.Success);
     }
 
+    // Render execution
+
+    private void StartOrResumeQueue()
+    {
+        var job = ResolveQueueJobToStart();
+        if (job is null)
+        {
+            SetStatus("Add at least one enabled job before starting the queue.", StatusTone.Error);
+            return;
+        }
+
+        var isResume = HasPausedJobs || IsPausedJob(job);
+        var resumePlan = isResume ? RenderResumePlanner.Create(job) : default;
+        SelectedJob = job;
+        job.Status = RenderJobStatus.Rendering;
+        if (!isResume)
+        {
+            job.ProgressValue = 0;
+            job.CompletedFrameRenderSeconds = 0;
+            job.ResumeCompletedFrameCount = 0;
+            job.LastReportedFrameNumber = 0;
+            job.LastCompletedFrameNumber = 0;
+            job.ProgressText = "Starting...";
+        }
+        else
+        {
+            job.ProgressText = BuildResumeProgressText(job, resumePlan);
+        }
+
+        job.ElapsedText = string.Empty;
+        job.EtaText = string.Empty;
+        job.LastStartedUtc = DateTimeOffset.Now;
+        AppendLog(job, isResume ? BuildResumeLogMessage(resumePlan) : "Starting render...");
+
+        IsQueueRunning = true;
+        RefreshComputedState();
+        SetStatus(
+            isResume
+                ? $"Resumed {job.EffectiveName}."
+                : $"Started the queue with {job.EffectiveName}.",
+            StatusTone.Success);
+
+        _renderCts = new CancellationTokenSource();
+        _ = RunQueueAsync(_renderCts.Token, resumePlan);
+    }
+
+    private void StopQueue()
+    {
+        _renderCts?.Cancel();
+        SetStatus("Stopping... waiting for Blender to exit.", StatusTone.Neutral);
+    }
+
+    private async Task RunQueueAsync(CancellationToken ct, RenderResumePlan firstJobResumePlan)
+    {
+        var nextLaunchUsesResumePlan = true;
+
+        try
+        {
+            while (!ct.IsCancellationRequested)
+            {
+                var job = ResolveRunningJob();
+                if (job is null)
+                {
+                    break;
+                }
+
+                var resumePlan = nextLaunchUsesResumePlan ? firstJobResumePlan : default;
+                nextLaunchUsesResumePlan = false;
+                await LaunchJobAsync(job, ct, resumePlan);
+
+                if (ct.IsCancellationRequested)
+                {
+                    break;
+                }
+
+                // Find the next enabled job that can still be rendered.
+                var nextJob = Jobs.FirstOrDefault(j =>
+                    j.IsEnabled && j.Status is RenderJobStatus.Ready or RenderJobStatus.Pending or RenderJobStatus.Inspecting);
+
+                if (nextJob is null)
+                {
+                    break;
+                }
+
+                nextJob.Status = RenderJobStatus.Rendering;
+                nextJob.ProgressValue = 0;
+                nextJob.ProgressText = "Starting...";
+                nextJob.ElapsedText = string.Empty;
+                nextJob.EtaText = string.Empty;
+                nextJob.LastStartedUtc = DateTimeOffset.Now;
+                SelectedJob = nextJob;
+                AppendLog(nextJob, "Starting render...");
+                RefreshComputedState();
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // Expected on cancellation; handled below.
+        }
+        catch (Exception ex)
+        {
+            var failedJob = ResolveRunningJob();
+            if (failedJob is not null)
+            {
+                failedJob.Status = RenderJobStatus.Failed;
+                failedJob.ProgressText = "Error";
+                AppendLog(failedJob, $"Unexpected error: {ex.Message}");
+            }
+
+            SetStatus($"Queue error: {ex.Message}", StatusTone.Error);
+        }
+        finally
+        {
+            // Mark any still-rendering job as canceled if we were stopped
+            if (ct.IsCancellationRequested)
+            {
+                var stoppedJob = ResolveRunningJob();
+                if (stoppedJob is not null)
+                {
+                    stoppedJob.Status = RenderJobStatus.Canceled;
+                    stoppedJob.ProgressText = $"Stopped at {stoppedJob.ProgressPercentLabel}";
+                    AppendLog(stoppedJob, "Render stopped by user.");
+                }
+
+                SetStatus("Queue stopped.", StatusTone.Neutral);
+            }
+            else
+            {
+                var anyCompleted = Jobs.Any(j => j.Status == RenderJobStatus.Completed);
+                if (anyCompleted)
+                {
+                    SetStatus("All queue jobs completed.", StatusTone.Success);
+                }
+            }
+
+            IsQueueRunning = false;
+            RefreshComputedState();
+        }
+    }
+
+    private async Task LaunchJobAsync(RenderQueueItemViewModel job, CancellationToken ct, RenderResumePlan resumePlan)
+    {
+        var (exePath, arguments) = BuildProcessCommand(job, resumePlan);
+
+        if (string.IsNullOrWhiteSpace(exePath) || !File.Exists(exePath))
+        {
+            job.Status = RenderJobStatus.Failed;
+            job.ProgressText = "Blender not found";
+            AppendLog(job, $"Blender executable not found at: {exePath}");
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(job.BlendFilePath) || !File.Exists(job.BlendFilePath.Trim()))
+        {
+            job.Status = RenderJobStatus.Failed;
+            job.ProgressText = "Blend file not found";
+            AppendLog(job, $"Blend file not found at: {job.BlendFilePath}");
+            return;
+        }
+
+        // Ensure the output directory exists
+        try
+        {
+            var resolvedDir = ResolveOutputTemplate(
+                job.OutputPathTemplate.Trim(), job.BlendFilePath.Trim());
+            if (!Directory.Exists(resolvedDir))
+            {
+                Directory.CreateDirectory(resolvedDir);
+                AppendLog(job, $"Created output directory: {resolvedDir}");
+            }
+        }
+        catch (Exception ex)
+        {
+            AppendLog(job, $"Warning: could not create output directory: {ex.Message}");
+        }
+
+        AppendLog(job, $"> \"{exePath}\" {arguments}");
+
+        var psi = new ProcessStartInfo
+        {
+            FileName = exePath,
+            Arguments = arguments,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+        };
+
+        using var process = new Process { StartInfo = psi };
+
+        var progressContext = new JobProgressContext(ComputeTotalFrames(job));
+        _framesCompleted = resumePlan.CompletedFrameCount;
+        var stopwatch = Stopwatch.StartNew();
+
+        try
+        {
+            process.Start();
+        }
+        catch (Exception ex)
+        {
+            job.Status = RenderJobStatus.Failed;
+            job.ProgressText = "Failed to start";
+            AppendLog(job, $"Failed to start Blender: {ex.Message}");
+            return;
+        }
+
+        // Read process output on background threads and marshal UI updates back to the UI context.
+        var stdoutTask = Task.Run(async () =>
+        {
+            try
+            {
+                while (await process.StandardOutput.ReadLineAsync(ct) is { } line)
+                {
+                    var progress = BlenderOutputParser.TryParse(line);
+                    PostToUi(() => HandleProcessOutputLine(job, line, progress, progressContext, stopwatch));
+                }
+            }
+            catch (OperationCanceledException) { }
+            catch (IOException) { }
+            catch (ObjectDisposedException) { }
+        }, CancellationToken.None);
+
+        var stderrTask = Task.Run(async () =>
+        {
+            try
+            {
+                while (await process.StandardError.ReadLineAsync(ct) is { } line)
+                {
+                    var progress = BlenderOutputParser.TryParse(line);
+                    PostToUi(() => HandleProcessOutputLine(job, line, progress, progressContext, stopwatch));
+                }
+            }
+            catch (OperationCanceledException) { }
+            catch (IOException) { }
+            catch (ObjectDisposedException) { }
+        }, CancellationToken.None);
+
+        try
+        {
+            await process.WaitForExitAsync(ct);
+        }
+        catch (OperationCanceledException)
+        {
+            if (!process.HasExited)
+            {
+                try
+                {
+                    process.Kill(entireProcessTree: true);
+                    process.WaitForExit(5000);
+                }
+                catch { /* best effort */ }
+            }
+
+            throw;
+        }
+
+        // Let stream readers finish draining.
+        try { await Task.WhenAll(stdoutTask, stderrTask).WaitAsync(TimeSpan.FromSeconds(5)); }
+        catch { /* timeout is fine, streams may already be closed */ }
+
+        stopwatch.Stop();
+        job.ElapsedText = FormatElapsed(stopwatch.Elapsed);
+        job.LastCompletedUtc = DateTimeOffset.Now;
+
+        if (process.ExitCode == 0)
+        {
+            job.Status = RenderJobStatus.Completed;
+            job.ProgressValue = 100;
+            job.ProgressText = "Completed";
+            job.EtaText = string.Empty;
+            AppendLog(job, $"Render completed in {job.ElapsedText}.");
+            SetStatus($"{job.EffectiveName} completed.", StatusTone.Success);
+        }
+        else
+        {
+            job.Status = RenderJobStatus.Failed;
+            job.ProgressText = $"Failed (exit {process.ExitCode})";
+            job.EtaText = string.Empty;
+            job.LastErrorSummary = $"Blender exit code: {process.ExitCode}";
+            AppendLog(job, $"Blender exited with code {process.ExitCode}.");
+            SetStatus($"{job.EffectiveName} failed.", StatusTone.Error);
+        }
+
+        RefreshComputedState();
+    }
+
+    private void HandleProcessOutputLine(
+        RenderQueueItemViewModel job,
+        string line,
+        BlenderProgress? progress,
+        JobProgressContext progressContext,
+        Stopwatch stopwatch)
+    {
+        AppendLogRaw(job, line);
+
+        if (progress is not { } p)
+        {
+            return;
+        }
+
+        job.ElapsedText = FormatElapsed(stopwatch.Elapsed);
+
+        if (p.AnimationStartFrame != 0 || p.AnimationEndFrame != 0)
+        {
+            progressContext.AnimationStartFrame = p.AnimationStartFrame;
+            progressContext.TotalFrames = Math.Max(1, p.AnimationEndFrame - p.AnimationStartFrame + 1);
+
+            if (progressContext.TotalFrames > 0)
+            {
+                job.ProgressValue = (double)_framesCompleted / progressContext.TotalFrames * 100;
+                job.ProgressText = BuildOverallProgressText(job, progressContext, p.FrameNumber);
+                job.EtaText = BuildOverallEtaText(job, progressContext, 0);
+            }
+
+            RefreshComputedState();
+            return;
+        }
+
+        if (p.FrameNumber > 0)
+        {
+            job.LastReportedFrameNumber = p.FrameNumber;
+        }
+
+        if (p.IsFrameFinished)
+        {
+            var frameRenderSeconds = Math.Max(0, stopwatch.Elapsed.TotalSeconds - progressContext.ElapsedAtLastCompletedFrameSeconds);
+            job.CompletedFrameRenderSeconds += frameRenderSeconds;
+            progressContext.ElapsedAtLastCompletedFrameSeconds = stopwatch.Elapsed.TotalSeconds;
+            _framesCompleted++;
+            job.ResumeCompletedFrameCount = _framesCompleted;
+            job.LastCompletedFrameNumber = p.FrameNumber;
+
+            if (progressContext.TotalFrames > 0)
+            {
+                job.ProgressValue = (double)_framesCompleted / progressContext.TotalFrames * 100;
+                job.ProgressText = BuildOverallProgressText(job, progressContext, p.FrameNumber);
+                job.EtaText = BuildOverallEtaText(job, progressContext, 0);
+            }
+            else
+            {
+                job.ProgressText = $"Frame {p.FrameNumber} done ({_framesCompleted} total)";
+                job.EtaText = string.Empty;
+            }
+        }
+        else if (p.SavedPath is not null)
+        {
+            job.LastKnownOutputPath = p.SavedPath;
+        }
+        else if (p.SampleTotal > 0)
+        {
+            var sampleFraction = (double)p.SampleCurrent / p.SampleTotal;
+
+            if (progressContext.TotalFrames > 0)
+            {
+                job.ProgressValue = (_framesCompleted + sampleFraction) / progressContext.TotalFrames * 100;
+                job.ProgressText = BuildOverallProgressText(job, progressContext, p.FrameNumber);
+                job.EtaText = BuildOverallEtaText(job, progressContext, sampleFraction);
+            }
+            else
+            {
+                job.ProgressValue = sampleFraction * 100;
+                job.ProgressText = p.FrameNumber > 0
+                    ? $"Frame {p.FrameNumber}"
+                    : $"Sample {p.SampleCurrent}/{p.SampleTotal}";
+                job.EtaText = string.Empty;
+            }
+        }
+        else if (p.FrameNumber > 0)
+        {
+            job.ProgressText = BuildOverallProgressText(job, progressContext, p.FrameNumber);
+            job.EtaText = BuildOverallEtaText(job, progressContext, 0);
+        }
+
+        RefreshComputedState();
+    }
+
+    // Process command building
+
+    private (string exePath, string arguments) BuildProcessCommand(RenderQueueItemViewModel job, RenderResumePlan resumePlan)
+    {
+        var blenderPath = string.IsNullOrWhiteSpace(job.BlenderExecutablePath)
+            ? DefaultBlenderPath
+            : job.BlenderExecutablePath;
+
+        var args = new List<string>
+        {
+            "--background",
+            Quote(job.BlendFilePath.Trim()),
+        };
+
+        if (!string.IsNullOrWhiteSpace(job.SceneName))
+        {
+            args.Add("--scene");
+            args.Add(Quote(job.SceneName.Trim()));
+        }
+
+        if (!string.IsNullOrWhiteSpace(job.OutputPathTemplate))
+        {
+            var rawPattern = $"{job.OutputPathTemplate.Trim()}\\{job.OutputFileNameTemplate.Trim()}";
+            var resolved = ResolveOutputTemplate(rawPattern, job.BlendFilePath.Trim());
+            args.Add("--render-output");
+            args.Add(Quote(resolved));
+        }
+
+        switch (job.Mode)
+        {
+            case RenderMode.Animation:
+                if (resumePlan.HasResumeStartFrame)
+                {
+                    args.Add("-s");
+                    args.Add(resumePlan.ResumeStartFrame.ToString());
+                }
+
+                args.Add("--render-anim");
+                break;
+
+            case RenderMode.FrameRange:
+                var rangeStartFrame = resumePlan.HasResumeStartFrame
+                    ? resumePlan.ResumeStartFrame.ToString()
+                    : job.StartFrame.Trim();
+                if (!string.IsNullOrWhiteSpace(rangeStartFrame))
+                {
+                    args.Add("-s");
+                    args.Add(rangeStartFrame);
+                }
+
+                if (!string.IsNullOrWhiteSpace(job.EndFrame))
+                {
+                    args.Add("-e");
+                    args.Add(job.EndFrame.Trim());
+                }
+
+                args.Add("-j");
+                args.Add(string.IsNullOrWhiteSpace(job.Step) ? "1" : job.Step.Trim());
+                args.Add("-a");
+                break;
+
+            case RenderMode.SingleFrame:
+                args.Add("--render-frame");
+                args.Add(string.IsNullOrWhiteSpace(job.SingleFrame) ? "1" : job.SingleFrame.Trim());
+                break;
+        }
+
+        if (!string.IsNullOrWhiteSpace(job.ExtraArgs))
+        {
+            args.Add(job.ExtraArgs.Trim());
+        }
+
+        return (blenderPath.Trim(), string.Join(" ", args));
+    }
+
+    private static string ResolveOutputTemplate(string template, string blendFilePath)
+    {
+        var blendDir = Path.GetDirectoryName(blendFilePath) ?? string.Empty;
+        var blendName = Path.GetFileNameWithoutExtension(blendFilePath);
+
+        return template
+            .Replace("[BLEND_PATH]", blendDir, StringComparison.OrdinalIgnoreCase)
+            .Replace("[BLEND_NAME]", blendName, StringComparison.OrdinalIgnoreCase)
+            .Replace("[FRAME]", "####", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static int ComputeTotalFrames(RenderQueueItemViewModel job)
+    {
+        return job.Mode switch
+        {
+            RenderMode.SingleFrame => 1,
+            RenderMode.FrameRange when
+                int.TryParse(job.StartFrame.Trim(), out var start) &&
+                int.TryParse(job.EndFrame.Trim(), out var end) =>
+                Math.Max(1, (end - start) / (int.TryParse(job.Step.Trim(), out var s) && s > 0 ? s : 1) + 1),
+            _ => 0,
+        };
+    }
+
+    // Logging
+
     private void AppendLog(RenderQueueItemViewModel job, string message)
     {
         var prefix = $"[{DateTimeOffset.Now:yyyy-MM-dd HH:mm:ss}] ";
@@ -405,13 +892,28 @@ public partial class RenderManagerViewModel : ObservableObject
         }
     }
 
+    private void AppendLogRaw(RenderQueueItemViewModel job, string line)
+    {
+        job.LogOutput = string.IsNullOrWhiteSpace(job.LogOutput)
+            ? line
+            : $"{job.LogOutput}{Environment.NewLine}{line}";
+
+        if (job == SelectedJob)
+        {
+            OnPropertyChanged(nameof(SelectedJobLogOutput));
+        }
+    }
+
+    // Command preview (display only, not for execution)
+
     private string BuildCommandPreview(RenderQueueItemViewModel? job)
     {
         if (job is null)
         {
-            return "Select a queue item to preview the future Blender command.";
+            return "Select a queue item to preview the Blender command.";
         }
 
+        var resumePlan = IsPausedJob(job) ? RenderResumePlanner.Create(job) : default;
         var blenderPath = string.IsNullOrWhiteSpace(job.BlenderExecutablePath)
             ? DefaultBlenderPath
             : job.BlenderExecutablePath;
@@ -439,12 +941,20 @@ public partial class RenderManagerViewModel : ObservableObject
         switch (job.Mode)
         {
             case RenderMode.Animation:
+                if (resumePlan.HasResumeStartFrame)
+                {
+                    arguments.Add("-s");
+                    arguments.Add(resumePlan.ResumeStartFrame.ToString());
+                }
+
                 arguments.Add("--render-anim");
                 break;
 
             case RenderMode.FrameRange:
                 arguments.Add("-s");
-                arguments.Add(DisplayOrPlaceholder(job.StartFrame, "<start>"));
+                arguments.Add(resumePlan.HasResumeStartFrame
+                    ? resumePlan.ResumeStartFrame.ToString()
+                    : DisplayOrPlaceholder(job.StartFrame, "<start>"));
                 arguments.Add("-e");
                 arguments.Add(DisplayOrPlaceholder(job.EndFrame, "<end>"));
                 arguments.Add("-j");
@@ -466,6 +976,116 @@ public partial class RenderManagerViewModel : ObservableObject
         return string.Join(" ", arguments);
     }
 
+    // Helpers
+
+    private void PostToUi(Action action)
+    {
+        _uiContext.Post(_ => action(), null);
+    }
+
+    private static string FormatElapsed(TimeSpan elapsed)
+    {
+        return elapsed.TotalHours >= 1
+            ? elapsed.ToString(@"hh\:mm\:ss")
+            : elapsed.ToString(@"mm\:ss");
+    }
+
+    private static string BuildResumeLogMessage(RenderResumePlan resumePlan)
+    {
+        if (!resumePlan.HasResumeStartFrame)
+        {
+            return "Resuming render...";
+        }
+
+        return resumePlan.IsPartialFrameResume
+            ? $"Resuming render from frame {resumePlan.ResumeStartFrame}."
+            : $"Resuming render at frame {resumePlan.ResumeStartFrame}.";
+    }
+
+    private static string BuildResumeProgressText(RenderQueueItemViewModel job, RenderResumePlan resumePlan)
+    {
+        if (!resumePlan.HasResumeStartFrame)
+        {
+            return string.IsNullOrWhiteSpace(job.ProgressText) ? "Resuming..." : job.ProgressText;
+        }
+
+        return resumePlan.IsPartialFrameResume
+            ? $"Resuming frame {resumePlan.ResumeStartFrame}..."
+            : $"Continuing at frame {resumePlan.ResumeStartFrame}...";
+    }
+
+    private static string BuildOverallProgressText(
+        RenderQueueItemViewModel job,
+        JobProgressContext progressContext,
+        int frameNumber)
+    {
+        if (progressContext.TotalFrames <= 0)
+        {
+            return frameNumber > 0 ? $"Frame {frameNumber}" : "Rendering";
+        }
+
+        var currentFrameIndex = ResolveCurrentFrameIndex(job, progressContext, frameNumber);
+        var clampedFrameIndex = Math.Clamp(currentFrameIndex, 1, progressContext.TotalFrames);
+        return $"Frame {clampedFrameIndex}/{progressContext.TotalFrames}";
+    }
+
+    private static int ResolveCurrentFrameIndex(
+        RenderQueueItemViewModel job,
+        JobProgressContext progressContext,
+        int frameNumber)
+    {
+        if (frameNumber <= 0)
+        {
+            return Math.Min(progressContext.TotalFrames, Math.Max(1, job.ResumeCompletedFrameCount + 1));
+        }
+
+        return job.Mode switch
+        {
+            RenderMode.FrameRange => ResolveFrameRangeIndex(job, frameNumber),
+            RenderMode.Animation when progressContext.AnimationStartFrame != 0 =>
+                frameNumber - progressContext.AnimationStartFrame + 1,
+            _ => frameNumber,
+        };
+    }
+
+    private static int ResolveFrameRangeIndex(RenderQueueItemViewModel job, int frameNumber)
+    {
+        var startFrame = int.TryParse(job.StartFrame.Trim(), out var parsedStartFrame) ? parsedStartFrame : frameNumber;
+        var step = int.TryParse(job.Step.Trim(), out var parsedStep) && parsedStep > 0 ? parsedStep : 1;
+        return ((frameNumber - startFrame) / step) + 1;
+    }
+
+    private static string BuildOverallEtaText(
+        RenderQueueItemViewModel job,
+        JobProgressContext progressContext,
+        double currentFrameFraction)
+    {
+        return RenderEtaCalculator.BuildEtaText(
+            progressContext.TotalFrames,
+            job.ResumeCompletedFrameCount,
+            job.CompletedFrameRenderSeconds,
+            currentFrameFraction);
+    }
+
+    private static bool IsQueueJobFinished(RenderJobStatus status)
+    {
+        return status is RenderJobStatus.Completed or RenderJobStatus.Failed or RenderJobStatus.Skipped;
+    }
+
+    private sealed class JobProgressContext
+    {
+        public JobProgressContext(int totalFrames)
+        {
+            TotalFrames = totalFrames;
+        }
+
+        public int AnimationStartFrame { get; set; }
+
+        public double ElapsedAtLastCompletedFrameSeconds { get; set; }
+
+        public int TotalFrames { get; set; }
+    }
+
     private bool CanMoveSelectedJobDown()
     {
         return SelectedJob is not null && Jobs.IndexOf(SelectedJob) < Jobs.Count - 1;
@@ -481,22 +1101,24 @@ public partial class RenderManagerViewModel : ObservableObject
         return SelectedJob is not null;
     }
 
-    private bool CanToggleQueueRun()
+    private bool CanResetSelectedJob()
     {
-        return Jobs.Any(static job => job.IsEnabled);
+        return SelectedJob is not null && !IsQueueRunning && SelectedJob.Status != RenderJobStatus.Rendering;
     }
 
-    private bool IsPausedJob(RenderQueueItemViewModel job)
+    private bool CanToggleQueueRun()
     {
-        return job.ProgressValue > 0
-            && job.ProgressValue < 100
-            && job.Status is RenderJobStatus.Canceled or RenderJobStatus.Stopping;
+        return IsQueueRunning || Jobs.Any(static job => job.IsEnabled);
+    }
+
+    private static bool IsPausedJob(RenderQueueItemViewModel job)
+    {
+        return job.IsEnabled && job.Status is RenderJobStatus.Canceled;
     }
 
     private void LoadState()
     {
         var settings = _settingsStore.Load();
-        AutoInspectOnAdd = settings.AutoInspectOnAdd;
         DefaultBlenderPath = settings.DefaultBlenderPath ?? string.Empty;
         DefaultOutputPathTemplate = string.IsNullOrWhiteSpace(settings.DefaultOutputPathTemplate)
             ? "[BLEND_PATH]\\renders"
@@ -562,6 +1184,7 @@ public partial class RenderManagerViewModel : ObservableObject
 
         MoveSelectedJobUpCommand.NotifyCanExecuteChanged();
         MoveSelectedJobDownCommand.NotifyCanExecuteChanged();
+        ResetSelectedJobCommand.NotifyCanExecuteChanged();
         ToggleQueueRunCommand.NotifyCanExecuteChanged();
     }
 
@@ -599,70 +1222,14 @@ public partial class RenderManagerViewModel : ObservableObject
 
     private RenderQueueItemViewModel? ResolveQueueJobToStart()
     {
-        if (SelectedJob is { IsEnabled: true } selectedJob && selectedJob.Status != RenderJobStatus.Completed)
-        {
-            return selectedJob;
-        }
-
         return Jobs.FirstOrDefault(IsPausedJob)
-            ?? Jobs.FirstOrDefault(job => job.IsEnabled && job.Status != RenderJobStatus.Completed);
+            ?? Jobs.FirstOrDefault(job => job.IsEnabled
+                && job.Status is RenderJobStatus.Pending or RenderJobStatus.Ready or RenderJobStatus.Inspecting);
     }
 
     private RenderQueueItemViewModel? ResolveRunningJob()
     {
         return Jobs.FirstOrDefault(job => job.Status == RenderJobStatus.Rendering);
-    }
-
-    private void StartOrResumeQueueShell()
-    {
-        var job = ResolveQueueJobToStart();
-        if (job is null)
-        {
-            SetStatus("Add at least one enabled job before starting the queue.", StatusTone.Error);
-            return;
-        }
-
-        var isResume = HasPausedJobs || IsPausedJob(job);
-        SelectedJob = job;
-        job.Status = RenderJobStatus.Rendering;
-        if (job.ProgressValue <= 0)
-        {
-            job.ProgressValue = 12;
-        }
-
-        job.ProgressText = $"Running {job.ProgressPercentLabel}";
-        job.ElapsedText = job.ElapsedText.Length == 0 ? "00:00:12" : job.ElapsedText;
-        job.EtaText = job.EtaText.Length == 0 ? "ETA pending" : job.EtaText;
-        job.LastStartedUtc = DateTimeOffset.Now;
-        AppendLog(job, "Queue shell started this job. The real render pipeline will reuse the same start/stop/resume position.");
-
-        IsQueueRunning = true;
-        RefreshComputedState();
-        SetStatus(
-            isResume
-                ? $"Resumed {job.EffectiveName} from the same queue slot."
-                : $"Started the queue with {job.EffectiveName}.",
-            StatusTone.Success);
-    }
-
-    private void StopQueueShell()
-    {
-        var runningJob = ResolveRunningJob();
-        if (runningJob is null)
-        {
-            IsQueueRunning = false;
-            RefreshComputedState();
-            SetStatus("Queue was already idle.", StatusTone.Neutral);
-            return;
-        }
-
-        runningJob.Status = RenderJobStatus.Canceled;
-        runningJob.ProgressText = $"Paused at {runningJob.ProgressPercentLabel}";
-        AppendLog(runningJob, "Queue shell paused this job. Resume will continue from the same slot.");
-
-        IsQueueRunning = false;
-        RefreshComputedState();
-        SetStatus($"Paused {runningJob.EffectiveName}. Use the same button to resume from here.", StatusTone.Neutral);
     }
 
     private static string DisplayOrPlaceholder(string? value, string placeholder)
