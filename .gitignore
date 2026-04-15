@@ -4,8 +4,9 @@ obj/
 TestResults/
 _ref/
 docs/
+.claude/
+.superpowers/
 publish/
 *.user
 *.suo
 *.log
-
