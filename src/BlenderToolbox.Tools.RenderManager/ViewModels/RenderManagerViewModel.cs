@@ -31,6 +31,7 @@ public partial class RenderManagerViewModel : ObservableObject
     private readonly BlendInspectionService _blendInspectionService;
     private readonly IFilePickerService _filePickerService;
     private readonly RenderQueueStore _queueStore;
+    private readonly RenderPreviewLoader _renderPreviewLoader;
     private readonly string _runtimeDirectory;
     private readonly RenderManagerSettingsStore _settingsStore;
     private readonly SynchronizationContext _uiContext;
@@ -39,11 +40,13 @@ public partial class RenderManagerViewModel : ObservableObject
 
     public RenderManagerViewModel(
         BlendInspectionService blendInspectionService,
+        RenderPreviewLoader renderPreviewLoader,
         RenderManagerSettingsStore settingsStore,
         RenderQueueStore queueStore,
         IFilePickerService filePickerService)
     {
         _blendInspectionService = blendInspectionService;
+        _renderPreviewLoader = renderPreviewLoader;
         _settingsStore = settingsStore;
         _queueStore = queueStore;
         _filePickerService = filePickerService;
@@ -215,6 +218,7 @@ public partial class RenderManagerViewModel : ObservableObject
         if (value is not null)
         {
             value.PropertyChanged += OnSelectedJobPropertyChanged;
+            EnsureJobPreviewLoaded(value);
             if (!value.HasInspection)
             {
                 _ = TryInspectJobAsync(value, null);
@@ -802,6 +806,7 @@ public partial class RenderManagerViewModel : ObservableObject
         else if (p.SavedPath is not null)
         {
             job.LastKnownOutputPath = p.SavedPath;
+            _ = UpdateJobPreviewAsync(job, p.SavedPath);
         }
         else if (p.SampleTotal > 0)
         {
@@ -1140,6 +1145,46 @@ public partial class RenderManagerViewModel : ObservableObject
                !string.IsNullOrWhiteSpace(job.OutputFileNameTemplate) ||
                !string.IsNullOrWhiteSpace(job.ViewLayerName) ||
                (job.UsesOutputFallback && !string.IsNullOrWhiteSpace(job.ResolvedOutputPattern));
+    }
+
+    private void EnsureJobPreviewLoaded(RenderQueueItemViewModel job)
+    {
+        if (!job.HasPreviewImage && !string.IsNullOrWhiteSpace(job.LastKnownOutputPath))
+        {
+            _ = UpdateJobPreviewAsync(job, job.LastKnownOutputPath);
+        }
+    }
+
+    private async Task UpdateJobPreviewAsync(RenderQueueItemViewModel job, string outputPath)
+    {
+        var normalizedPath = outputPath?.Trim() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(normalizedPath))
+        {
+            return;
+        }
+
+        job.PreviewStatusText = $"Loading preview from {Path.GetFileName(normalizedPath)}...";
+
+        RenderPreviewLoadResult previewResult;
+        try
+        {
+            previewResult = await _renderPreviewLoader.LoadAsync(normalizedPath);
+        }
+        catch (Exception ex)
+        {
+            previewResult = new RenderPreviewLoadResult(null, $"Preview unavailable: {ex.Message}");
+        }
+
+        PostToUi(() =>
+        {
+            if (!string.Equals(job.LastKnownOutputPath.Trim(), normalizedPath, StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            job.PreviewImageSource = previewResult.ImageSource;
+            job.PreviewStatusText = previewResult.StatusText;
+        });
     }
 
     // Helpers

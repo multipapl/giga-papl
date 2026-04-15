@@ -1,4 +1,5 @@
 using System.IO;
+using System.Windows.Media.Imaging;
 using BlenderToolbox.Tools.RenderManager.Models;
 using CommunityToolkit.Mvvm.ComponentModel;
 
@@ -6,6 +7,9 @@ namespace BlenderToolbox.Tools.RenderManager.ViewModels;
 
 public partial class RenderQueueItemViewModel : ObservableObject
 {
+    private const string DefaultPreviewStatusText = "Preview will appear after the first saved frame.";
+    private const string StoredPreviewStatusText = "Preview can be reloaded from the last saved frame.";
+
     public RenderQueueItemViewModel()
     {
     }
@@ -47,6 +51,9 @@ public partial class RenderQueueItemViewModel : ObservableObject
         LastReportedFrameNumber = item.LastReportedFrameNumber;
         LastCompletedFrameNumber = item.LastCompletedFrameNumber;
         LastKnownOutputPath = item.LastKnownOutputPath;
+        PreviewStatusText = string.IsNullOrWhiteSpace(item.LastKnownOutputPath)
+            ? DefaultPreviewStatusText
+            : StoredPreviewStatusText;
         LastErrorSummary = item.LastErrorSummary;
         LogOutput = item.LogOutput;
         LastStartedUtc = item.LastStartedUtc;
@@ -218,6 +225,12 @@ public partial class RenderQueueItemViewModel : ObservableObject
 
     public string ProgressPercentLabel => $"{ProgressValue:0}%";
 
+    public bool HasPreviewImage => PreviewImageSource is not null;
+
+    public string PreviewPathText => string.IsNullOrWhiteSpace(LastKnownOutputPath)
+        ? "Waiting for the first saved frame."
+        : LastKnownOutputPath.Trim();
+
     public string ResolvedCameraName => ResolveOverride(CameraName, Inspection?.CameraName);
 
     public string ResolvedOutputDirectory => string.IsNullOrWhiteSpace(OutputPathTemplate)
@@ -362,6 +375,8 @@ public partial class RenderQueueItemViewModel : ObservableObject
         ProgressText = "Waiting";
         ElapsedText = string.Empty;
         EtaText = string.Empty;
+        PreviewImageSource = null;
+        PreviewStatusText = DefaultPreviewStatusText;
         LastKnownOutputPath = string.Empty;
         LastErrorSummary = string.Empty;
         CompletedFrameRenderSeconds = 0;
@@ -489,6 +504,12 @@ public partial class RenderQueueItemViewModel : ObservableObject
 
     [ObservableProperty]
     private string name = string.Empty;
+
+    [ObservableProperty]
+    private BitmapSource? previewImageSource;
+
+    [ObservableProperty]
+    private string previewStatusText = DefaultPreviewStatusText;
 
     [ObservableProperty]
     private bool outputFileNameOverrideEnabled;
@@ -643,6 +664,16 @@ public partial class RenderQueueItemViewModel : ObservableObject
     partial void OnProgressValueChanged(double value)
     {
         OnPropertyChanged(nameof(ProgressPercentLabel));
+    }
+
+    partial void OnLastKnownOutputPathChanged(string value)
+    {
+        OnPropertyChanged(nameof(PreviewPathText));
+    }
+
+    partial void OnPreviewImageSourceChanged(BitmapSource? value)
+    {
+        OnPropertyChanged(nameof(HasPreviewImage));
     }
 
     partial void OnSceneNameChanged(string value)

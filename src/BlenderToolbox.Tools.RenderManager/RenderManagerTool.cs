@@ -13,6 +13,7 @@ public sealed class RenderManagerTool : IToolDefinition, IStatefulTool
     {
         _viewModel = new RenderManagerViewModel(
             new BlendInspectionService(),
+            new RenderPreviewLoader(),
             new RenderManagerSettingsStore(settingsStore),
             new RenderQueueStore(settingsStore),
             filePickerService);

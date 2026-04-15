@@ -85,7 +85,10 @@ public sealed class RenderManagerTests
         Assert.Equal(0, job.ResumeCompletedFrameCount);
         Assert.Equal(0, job.LastReportedFrameNumber);
         Assert.Equal(0, job.LastCompletedFrameNumber);
+        Assert.Null(job.PreviewImageSource);
+        Assert.Equal("Preview will appear after the first saved frame.", job.PreviewStatusText);
         Assert.Equal(string.Empty, job.LastKnownOutputPath);
+        Assert.Equal("Waiting for the first saved frame.", job.PreviewPathText);
         Assert.Equal(string.Empty, job.LastErrorSummary);
         Assert.Null(job.LastStartedUtc);
         Assert.Null(job.LastCompletedUtc);
