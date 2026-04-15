@@ -8,6 +8,8 @@ public sealed class RenderQueueItem
 
     public string CameraName { get; set; } = string.Empty;
 
+    public bool CameraOverrideEnabled { get; set; }
+
     public string CollectionOverrides { get; set; } = string.Empty;
 
     public double CompletedFrameRenderSeconds { get; set; }
@@ -20,7 +22,11 @@ public sealed class RenderQueueItem
 
     public string ExtraArgs { get; set; } = string.Empty;
 
+    public bool FrameOverrideEnabled { get; set; }
+
     public string Id { get; set; } = Guid.NewGuid().ToString("N");
+
+    public BlendInspectionSnapshot? Inspection { get; set; }
 
     public bool IsEnabled { get; set; } = true;
 
@@ -44,7 +50,15 @@ public sealed class RenderQueueItem
 
     public string OutputFileNameTemplate { get; set; } = "[BLEND_NAME]_[FRAME]";
 
+    public bool OutputFileNameOverrideEnabled { get; set; }
+
+    public string OutputFormat { get; set; } = string.Empty;
+
+    public bool OutputFormatOverrideEnabled { get; set; }
+
     public string OutputPathTemplate { get; set; } = "[BLEND_PATH]\\renders";
+
+    public bool OutputPathOverrideEnabled { get; set; }
 
     public double ProgressValue { get; set; }
 
@@ -53,6 +67,8 @@ public sealed class RenderQueueItem
     public int ResumeCompletedFrameCount { get; set; }
 
     public string SceneName { get; set; } = string.Empty;
+
+    public bool SceneOverrideEnabled { get; set; }
 
     public string SingleFrame { get; set; } = string.Empty;
 
@@ -63,4 +79,6 @@ public sealed class RenderQueueItem
     public string Step { get; set; } = "1";
 
     public string ViewLayerName { get; set; } = string.Empty;
+
+    public bool ViewLayerOverrideEnabled { get; set; }
 }

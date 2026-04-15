@@ -57,11 +57,7 @@ public sealed class RenderManagerTests
     [Fact]
     public void RenderQueueItemViewModel_ResetRuntimeState_ClearsRuntimeFieldsAndRestoresReadyStatus()
     {
-        var job = RenderQueueItemViewModel.CreateNew(
-            @"Q:\shots\scene.blend",
-            @"C:\Program Files\Blender Foundation\Blender 4.0\blender.exe",
-            @"[BLEND_PATH]\renders",
-            "[BLEND_NAME]_[FRAME]");
+        var job = RenderQueueItemViewModel.CreateNew(@"Q:\shots\scene.blend");
 
         job.ProgressValue = 64;
         job.ProgressText = "Frame 12/20";
@@ -99,11 +95,7 @@ public sealed class RenderManagerTests
     [Fact]
     public void RenderResumePlanner_ResumesPartialFrameFromCurrentFrame()
     {
-        var job = RenderQueueItemViewModel.CreateNew(
-            @"Q:\shots\scene.blend",
-            @"C:\Program Files\Blender Foundation\Blender 4.0\blender.exe",
-            @"[BLEND_PATH]\renders",
-            "[BLEND_NAME]_[FRAME]");
+        var job = RenderQueueItemViewModel.CreateNew(@"Q:\shots\scene.blend");
 
         job.Mode = RenderMode.FrameRange;
         job.StartFrame = "10";
@@ -123,11 +115,7 @@ public sealed class RenderManagerTests
     [Fact]
     public void RenderResumePlanner_ResumesAfterCompletedFrameFromNextStep()
     {
-        var job = RenderQueueItemViewModel.CreateNew(
-            @"Q:\shots\scene.blend",
-            @"C:\Program Files\Blender Foundation\Blender 4.0\blender.exe",
-            @"[BLEND_PATH]\renders",
-            "[BLEND_NAME]_[FRAME]");
+        var job = RenderQueueItemViewModel.CreateNew(@"Q:\shots\scene.blend");
 
         job.Mode = RenderMode.FrameRange;
         job.StartFrame = "10";
@@ -166,5 +154,22 @@ public sealed class RenderManagerTests
             currentFrameFraction: 0.5);
 
         Assert.Equal(string.Empty, etaText);
+    }
+
+    [Fact]
+    public void RenderQueueItemViewModel_UsesFallbackOutputWhenBlendOutputIsMissing()
+    {
+        var job = RenderQueueItemViewModel.CreateNew(@"Q:\shots\scene.blend");
+
+        job.ApplyInspection(new BlendInspectionSnapshot
+        {
+            RawOutputPath = "/tmp/",
+            ResolvedOutputPath = @"Q:\tmp\",
+        });
+
+        Assert.True(job.UsesOutputFallback);
+        Assert.Equal(@"Q:\shots\renders", job.ResolvedOutputDirectory);
+        Assert.Equal("scene", job.ResolvedOutputName);
+        Assert.Equal(@"Q:\shots\renders\scene_####", job.ResolvedOutputPattern);
     }
 }

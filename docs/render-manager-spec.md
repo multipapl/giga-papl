@@ -163,7 +163,7 @@ The new tool should add a few repo-specific improvements instead of copying the 
 - stronger separation between UI, queue state, and Blender invocation
 - deterministic JSON schemas for settings and queue
 - generated helper scripts as embedded resources or templates owned by this repo
-- explicit `Preview Command` section so the user can inspect the final Blender CLI
+- compact blend metadata card with manual `Reload .blend` action and live logs instead of a permanent command-preview panel
 - structured error model instead of parsing only free-form text
 - easier future testability for process building and output parsing
 
@@ -173,7 +173,7 @@ The new tool should add a few repo-specific improvements instead of copying the 
 2. As a user, I can override scene, camera, or view layer per queue item.
 3. As a user, I can send Blender a helper script that changes output path naming before render starts.
 4. As a user, I can render a full animation, a frame range, or a single frame.
-5. As a user, I can inspect the generated command and logs when something fails.
+5. As a user, I can reload blend defaults and inspect logs when something fails.
 6. As a user, I can stop after the current frame instead of killing Blender immediately.
 7. As a user, I can reopen my queue on the next app launch.
 
@@ -413,7 +413,7 @@ Queue columns:
 - `Remove`
 - `Move Up`
 - `Move Down`
-- `Inspect`
+- `Reload .blend`
 - `Render Selected`
 - `Render Queue`
 - `Stop`
@@ -543,7 +543,7 @@ Manual test matrix:
 - Blender executable config
 - blend inspection script
 - item editor for scene, camera, and view layer
-- command preview
+- automatic blend metadata reload
 
 ## Phase 3
 
@@ -572,7 +572,7 @@ These decisions should be made before implementation starts:
 2. Should output-path rewriting also touch compositor `OUTPUT_FILE` nodes in V1?
 3. Should collection overrides be include-based, exclude-based, or both?
 4. Should the tool keep one active render at a time only, or allow limited local parallelism later?
-5. Should Blend inspection be automatic on add, or manual via `Inspect`?
+5. Should Blend inspection be automatic on add, or manual via `Reload .blend`?
 
 ## Recommended Default Answers
 
@@ -598,7 +598,7 @@ The first release is successful if:
 
 Date: `2026-04-15`
 
-`Render Manager` is now a working in-repo tool with real Blender process execution.
+`Render Manager` is now a working in-repo tool with real Blender process execution and blend inspection.
 
 What the current implementation already covers:
 
@@ -608,7 +608,8 @@ What the current implementation already covers:
 - persisted queue
 - queue actions for add, duplicate, reset, remove, reorder, and enable or disable
 - real `Start / Stop / Resume` process execution
-- command preview and live log output
+- automatic and manual blend inspection with scene, camera, view-layer, frame, and output metadata
+- live log output
 - parsed per-job frame progress
 - queue-wide discrete progress by finished jobs
 - whole-job ETA based on average completed frame time
@@ -616,12 +617,11 @@ What the current implementation already covers:
 
 What is still not at release quality:
 
-- blend inspection is still not implemented
-- camera, view layer, and collection override fields are not yet applied to the Blender command
+- scene, camera, and view-layer selectors still feel laggy in the current UI and need a cleanup pass before broader override work
 - old saved queue entries may not contain newer runtime fields until they are rerun
 - UI polish and documentation still need cleanup passes
 
 Practical implication:
 
 - the tool is usable for local queue rendering and iteration
-- the next implementation steps should focus on metadata inspection, override application, and cleanup
+- the next implementation steps should focus on selector responsiveness, UI cleanup, and broader override architecture

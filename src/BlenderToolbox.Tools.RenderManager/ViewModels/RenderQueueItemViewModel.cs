@@ -18,17 +18,25 @@ public partial class RenderQueueItemViewModel : ObservableObject
         BlendFilePath = item.BlendFilePath;
         BlenderExecutablePath = item.BlenderExecutablePath;
         Mode = item.Mode;
+        FrameOverrideEnabled = item.FrameOverrideEnabled || item.Mode != RenderMode.Animation;
         StartFrame = item.StartFrame;
         EndFrame = item.EndFrame;
         Step = item.Step;
         SingleFrame = item.SingleFrame;
         SceneName = item.SceneName;
+        SceneOverrideEnabled = item.SceneOverrideEnabled || !string.IsNullOrWhiteSpace(item.SceneName);
         CameraName = item.CameraName;
+        CameraOverrideEnabled = item.CameraOverrideEnabled || !string.IsNullOrWhiteSpace(item.CameraName);
         ViewLayerName = item.ViewLayerName;
+        ViewLayerOverrideEnabled = item.ViewLayerOverrideEnabled || !string.IsNullOrWhiteSpace(item.ViewLayerName);
         CollectionOverrides = item.CollectionOverrides;
         CompletedFrameRenderSeconds = item.CompletedFrameRenderSeconds;
-        OutputPathTemplate = item.OutputPathTemplate;
-        OutputFileNameTemplate = item.OutputFileNameTemplate;
+        OutputPathTemplate = NormalizeLegacyOutputPathOverride(item.OutputPathTemplate);
+        OutputPathOverrideEnabled = item.OutputPathOverrideEnabled || !string.IsNullOrWhiteSpace(OutputPathTemplate);
+        OutputFileNameTemplate = NormalizeLegacyOutputNameOverride(item.OutputFileNameTemplate);
+        OutputFileNameOverrideEnabled = item.OutputFileNameOverrideEnabled || !string.IsNullOrWhiteSpace(OutputFileNameTemplate);
+        OutputFormat = item.OutputFormat;
+        OutputFormatOverrideEnabled = item.OutputFormatOverrideEnabled || !string.IsNullOrWhiteSpace(item.OutputFormat);
         ExtraArgs = item.ExtraArgs;
         Status = item.Status;
         ProgressValue = item.ProgressValue;
@@ -43,6 +51,7 @@ public partial class RenderQueueItemViewModel : ObservableObject
         LogOutput = item.LogOutput;
         LastStartedUtc = item.LastStartedUtc;
         LastCompletedUtc = item.LastCompletedUtc;
+        Inspection = item.Inspection;
     }
 
     public string EffectiveName => string.IsNullOrWhiteSpace(Name)
@@ -57,13 +66,73 @@ public partial class RenderQueueItemViewModel : ObservableObject
         ? "Untitled job"
         : Path.GetFileNameWithoutExtension(BlendFilePath.Trim());
 
+    public string BlendFrameSummary
+    {
+        get
+        {
+            if (Inspection is null || Inspection.FrameStart <= 0 || Inspection.FrameEnd <= 0)
+            {
+                return "Blend frame range will be used.";
+            }
+
+            var step = Math.Max(1, Inspection.FrameStep);
+            return $"Blend range {Inspection.FrameStart} to {Inspection.FrameEnd} step {step}";
+        }
+    }
+
     public string FrameSummary => Mode switch
     {
-        RenderMode.Animation => "Animation",
+        RenderMode.Animation => $"Animation | {BlendFrameSummary}",
         RenderMode.FrameRange => $"Frames {DisplayValue(StartFrame)} to {DisplayValue(EndFrame)} step {DisplayValue(Step, "1")}",
         RenderMode.SingleFrame => $"Frame {DisplayValue(SingleFrame)}",
         _ => "Mode pending",
     };
+
+    public bool HasFrameOverride
+    {
+        get => FrameOverrideEnabled;
+        set
+        {
+            if (value == HasFrameOverride)
+            {
+                return;
+            }
+
+            FrameOverrideEnabled = value;
+            if (!value)
+            {
+                Mode = RenderMode.Animation;
+                StartFrame = string.Empty;
+                EndFrame = string.Empty;
+                SingleFrame = string.Empty;
+                Step = "1";
+            }
+            else
+            {
+                Mode = RenderMode.FrameRange;
+                StartFrame = Inspection is { FrameStart: > 0 } inspectedStart ? inspectedStart.FrameStart.ToString() : StartFrame;
+                EndFrame = Inspection is { FrameEnd: > 0 } inspectedEnd ? inspectedEnd.FrameEnd.ToString() : EndFrame;
+                Step = Inspection is { FrameStep: > 0 } inspectedStep ? inspectedStep.FrameStep.ToString() : "1";
+            }
+
+            OnPropertyChanged(nameof(HasFrameOverride));
+        }
+    }
+
+    public bool HasInspection => Inspection is not null;
+
+    public string InspectionSummary
+    {
+        get
+        {
+            if (Inspection is null)
+            {
+                return "Blend defaults are not inspected yet.";
+            }
+
+            return $"Inspected {Inspection.InspectedAtUtc.ToLocalTime():yyyy-MM-dd HH:mm:ss}";
+        }
+    }
 
     public bool IsAnimationMode => Mode == RenderMode.Animation;
 
@@ -71,40 +140,182 @@ public partial class RenderQueueItemViewModel : ObservableObject
 
     public bool IsSingleFrameMode => Mode == RenderMode.SingleFrame;
 
-    public string ProgressPercentLabel => $"{ProgressValue:0}%";
-
-    public string TargetSummary
+    public bool HasOutputFormatOverride
     {
-        get
+        get => OutputFormatOverrideEnabled;
+        set
         {
-            var targets = new List<string>();
-
-            if (!string.IsNullOrWhiteSpace(SceneName))
+            if (value == HasOutputFormatOverride)
             {
-                targets.Add($"Scene: {SceneName.Trim()}");
+                return;
             }
 
-            if (!string.IsNullOrWhiteSpace(CameraName))
-            {
-                targets.Add($"Camera: {CameraName.Trim()}");
-            }
-
-            if (!string.IsNullOrWhiteSpace(ViewLayerName))
-            {
-                targets.Add($"Layer: {ViewLayerName.Trim()}");
-            }
-
-            return targets.Count == 0
-                ? "Targets inherit from the blend file."
-                : string.Join(" | ", targets);
+            OutputFormatOverrideEnabled = value;
+            OutputFormat = value ? ResolvedOutputFormat : string.Empty;
+            OnPropertyChanged(nameof(HasOutputFormatOverride));
         }
     }
 
-    public static RenderQueueItemViewModel CreateNew(
-        string blendFilePath,
-        string defaultBlenderPath,
-        string defaultOutputPathTemplate,
-        string defaultOutputFileNameTemplate)
+    public bool HasOutputNameOverride
+    {
+        get => OutputFileNameOverrideEnabled;
+        set
+        {
+            if (value == HasOutputNameOverride)
+            {
+                return;
+            }
+
+            OutputFileNameOverrideEnabled = value;
+            OutputFileNameTemplate = value ? ResolvedOutputName : string.Empty;
+            OnPropertyChanged(nameof(HasOutputNameOverride));
+        }
+    }
+
+    public bool HasOutputPathOverride
+    {
+        get => OutputPathOverrideEnabled;
+        set
+        {
+            if (value == HasOutputPathOverride)
+            {
+                return;
+            }
+
+            OutputPathOverrideEnabled = value;
+            OutputPathTemplate = value ? ResolvedOutputDirectory : string.Empty;
+            OnPropertyChanged(nameof(HasOutputPathOverride));
+        }
+    }
+
+    public string OutputDirectoryHint
+    {
+        get
+        {
+            var defaults = ResolveBlendOutputDefaults();
+            var source = defaults.UsesFallback
+                ? "Empty = fallback"
+                : "Empty = from blend";
+            return $"{source}: {defaults.Directory}";
+        }
+    }
+
+    public string OutputNameHint
+    {
+        get
+        {
+            var defaults = ResolveBlendOutputDefaults();
+            var source = defaults.UsesFallback
+                ? "Empty = fallback"
+                : "Empty = from blend";
+            return $"{source}: {defaults.Name}";
+        }
+    }
+
+    public string OutputFormatHint => string.IsNullOrWhiteSpace(Inspection?.OutputFormat)
+        ? "Empty = use format from blend."
+        : $"Empty = from blend: {Inspection.OutputFormat}";
+
+    public string ProgressPercentLabel => $"{ProgressValue:0}%";
+
+    public string ResolvedCameraName => ResolveOverride(CameraName, Inspection?.CameraName);
+
+    public string ResolvedOutputDirectory => string.IsNullOrWhiteSpace(OutputPathTemplate)
+        ? ResolveBlendOutputDefaults().Directory
+        : OutputPathTemplate.Trim();
+
+    public string ResolvedOutputFormat => ResolveOverride(OutputFormat, Inspection?.OutputFormat);
+
+    public string ResolvedOutputName => string.IsNullOrWhiteSpace(OutputFileNameTemplate)
+        ? ResolveBlendOutputDefaults().Name
+        : OutputFileNameTemplate.Trim();
+
+    public string ResolvedOutputPattern
+    {
+        get
+        {
+            var directory = ResolvedOutputDirectory;
+            var name = ResolvedOutputName;
+            if (string.IsNullOrWhiteSpace(directory) || string.IsNullOrWhiteSpace(name))
+            {
+                return string.Empty;
+            }
+
+            var normalizedName = name.Trim();
+            if (!normalizedName.Contains('#'))
+            {
+                normalizedName = normalizedName.EndsWith("_", StringComparison.Ordinal) ||
+                                 normalizedName.EndsWith("-", StringComparison.Ordinal) ||
+                                 normalizedName.EndsWith(".", StringComparison.Ordinal)
+                    ? $"{normalizedName}####"
+                    : $"{normalizedName}_####";
+            }
+
+            return Path.Combine(directory, normalizedName);
+        }
+    }
+
+    public string ResolvedSceneName => ResolveOverride(SceneName, Inspection?.SceneName);
+
+    public string ResolvedViewLayerName => ResolveOverride(ViewLayerName, Inspection?.ViewLayerName);
+
+    public bool HasSceneOverride
+    {
+        get => SceneOverrideEnabled;
+        set
+        {
+            if (value == HasSceneOverride)
+            {
+                return;
+            }
+
+            SceneOverrideEnabled = value;
+            SceneName = value ? ResolvedSceneName : string.Empty;
+            OnPropertyChanged(nameof(HasSceneOverride));
+        }
+    }
+
+    public bool HasCameraOverride
+    {
+        get => CameraOverrideEnabled;
+        set
+        {
+            if (value == HasCameraOverride)
+            {
+                return;
+            }
+
+            CameraOverrideEnabled = value;
+            CameraName = value ? ResolvedCameraName : string.Empty;
+            OnPropertyChanged(nameof(HasCameraOverride));
+        }
+    }
+
+    public bool HasViewLayerOverride
+    {
+        get => ViewLayerOverrideEnabled;
+        set
+        {
+            if (value == HasViewLayerOverride)
+            {
+                return;
+            }
+
+            ViewLayerOverrideEnabled = value;
+            ViewLayerName = value ? ResolvedViewLayerName : string.Empty;
+            OnPropertyChanged(nameof(HasViewLayerOverride));
+        }
+    }
+
+    public string SceneHint => BuildInheritedHint(Inspection?.SceneName, "scene");
+
+    public string CameraHint => BuildInheritedHint(Inspection?.CameraName, "camera");
+
+    public string ViewLayerHint => BuildInheritedHint(Inspection?.ViewLayerName, "view layer");
+
+    public bool UsesOutputFallback => ResolveBlendOutputDefaults().UsesFallback;
+
+    public static RenderQueueItemViewModel CreateNew(string blendFilePath)
     {
         var fileName = string.IsNullOrWhiteSpace(blendFilePath)
             ? "New render job"
@@ -114,9 +325,10 @@ public partial class RenderQueueItemViewModel : ObservableObject
         {
             Name = fileName,
             BlendFilePath = blendFilePath,
-            BlenderExecutablePath = defaultBlenderPath,
-            OutputPathTemplate = defaultOutputPathTemplate,
-            OutputFileNameTemplate = defaultOutputFileNameTemplate,
+            BlenderExecutablePath = string.Empty,
+            OutputPathTemplate = string.Empty,
+            OutputFileNameTemplate = string.Empty,
+            OutputFormat = string.Empty,
         };
 
         job.ResetRuntimeState("Queue item created.");
@@ -126,6 +338,11 @@ public partial class RenderQueueItemViewModel : ObservableObject
     public static RenderQueueItemViewModel FromModel(RenderQueueItem item)
     {
         return new RenderQueueItemViewModel(item);
+    }
+
+    public void ApplyInspection(BlendInspectionSnapshot inspection)
+    {
+        Inspection = inspection;
     }
 
     public RenderQueueItemViewModel CreateDuplicate()
@@ -166,18 +383,26 @@ public partial class RenderQueueItemViewModel : ObservableObject
             Name = Name.Trim(),
             BlendFilePath = BlendFilePath.Trim(),
             BlenderExecutablePath = BlenderExecutablePath.Trim(),
+            CameraOverrideEnabled = CameraOverrideEnabled,
             Mode = Mode,
+            FrameOverrideEnabled = FrameOverrideEnabled,
             StartFrame = StartFrame.Trim(),
             EndFrame = EndFrame.Trim(),
             Step = Step.Trim(),
             SingleFrame = SingleFrame.Trim(),
             SceneName = SceneName.Trim(),
+            SceneOverrideEnabled = SceneOverrideEnabled,
             CameraName = CameraName.Trim(),
             ViewLayerName = ViewLayerName.Trim(),
+            ViewLayerOverrideEnabled = ViewLayerOverrideEnabled,
             CollectionOverrides = CollectionOverrides.Trim(),
             CompletedFrameRenderSeconds = CompletedFrameRenderSeconds,
             OutputPathTemplate = OutputPathTemplate.Trim(),
+            OutputPathOverrideEnabled = OutputPathOverrideEnabled,
             OutputFileNameTemplate = OutputFileNameTemplate.Trim(),
+            OutputFileNameOverrideEnabled = OutputFileNameOverrideEnabled,
+            OutputFormat = OutputFormat.Trim(),
+            OutputFormatOverrideEnabled = OutputFormatOverrideEnabled,
             ExtraArgs = ExtraArgs.Trim(),
             Status = Status,
             ProgressValue = ProgressValue,
@@ -192,6 +417,7 @@ public partial class RenderQueueItemViewModel : ObservableObject
             LogOutput = LogOutput ?? string.Empty,
             LastStartedUtc = LastStartedUtc,
             LastCompletedUtc = LastCompletedUtc,
+            Inspection = Inspection,
         };
     }
 
@@ -200,6 +426,9 @@ public partial class RenderQueueItemViewModel : ObservableObject
 
     [ObservableProperty]
     private string blenderExecutablePath = string.Empty;
+
+    [ObservableProperty]
+    private bool cameraOverrideEnabled;
 
     [ObservableProperty]
     private string cameraName = string.Empty;
@@ -223,7 +452,13 @@ public partial class RenderQueueItemViewModel : ObservableObject
     private string extraArgs = string.Empty;
 
     [ObservableProperty]
+    private bool frameOverrideEnabled;
+
+    [ObservableProperty]
     private string id = Guid.NewGuid().ToString("N");
+
+    [ObservableProperty]
+    private BlendInspectionSnapshot? inspection;
 
     [ObservableProperty]
     private bool isEnabled = true;
@@ -256,10 +491,22 @@ public partial class RenderQueueItemViewModel : ObservableObject
     private string name = string.Empty;
 
     [ObservableProperty]
-    private string outputFileNameTemplate = "[BLEND_NAME]_[FRAME]";
+    private bool outputFileNameOverrideEnabled;
 
     [ObservableProperty]
-    private string outputPathTemplate = "[BLEND_PATH]\\renders";
+    private string outputFileNameTemplate = string.Empty;
+
+    [ObservableProperty]
+    private bool outputFormatOverrideEnabled;
+
+    [ObservableProperty]
+    private string outputFormat = string.Empty;
+
+    [ObservableProperty]
+    private bool outputPathOverrideEnabled;
+
+    [ObservableProperty]
+    private string outputPathTemplate = string.Empty;
 
     [ObservableProperty]
     private double progressValue;
@@ -272,6 +519,9 @@ public partial class RenderQueueItemViewModel : ObservableObject
 
     [ObservableProperty]
     private string sceneName = string.Empty;
+
+    [ObservableProperty]
+    private bool sceneOverrideEnabled;
 
     [ObservableProperty]
     private string singleFrame = string.Empty;
@@ -288,16 +538,61 @@ public partial class RenderQueueItemViewModel : ObservableObject
     [ObservableProperty]
     private string viewLayerName = string.Empty;
 
+    [ObservableProperty]
+    private bool viewLayerOverrideEnabled;
+
+    public IReadOnlyList<string> AvailableCameraNames
+    {
+        get
+        {
+            if (Inspection?.SceneCameras is not { Count: > 0 } sceneCameras)
+            {
+                return Inspection?.AvailableCameras ?? [];
+            }
+
+            var sceneKey = ResolvedSceneName;
+            if (!string.IsNullOrWhiteSpace(sceneKey) && sceneCameras.TryGetValue(sceneKey, out var cameras) && cameras.Count > 0)
+            {
+                return cameras;
+            }
+
+            return Inspection?.AvailableCameras ?? [];
+        }
+    }
+
+    public IReadOnlyList<string> AvailableSceneNames => Inspection?.AvailableScenes ?? [];
+
+    public IReadOnlyList<string> AvailableViewLayerNames
+    {
+        get
+        {
+            if (Inspection?.SceneViewLayers is not { Count: > 0 } sceneViewLayers)
+            {
+                return Inspection?.AvailableViewLayers ?? [];
+            }
+
+            var sceneKey = ResolvedSceneName;
+            if (!string.IsNullOrWhiteSpace(sceneKey) && sceneViewLayers.TryGetValue(sceneKey, out var viewLayers) && viewLayers.Count > 0)
+            {
+                return viewLayers;
+            }
+
+            return Inspection?.AvailableViewLayers ?? [];
+        }
+    }
+
     partial void OnBlendFilePathChanged(string value)
     {
         OnPropertyChanged(nameof(BlendDirectory));
         OnPropertyChanged(nameof(BlendFileName));
         OnPropertyChanged(nameof(EffectiveName));
+        NotifyResolvedSettingsChanged();
     }
 
     partial void OnCameraNameChanged(string value)
     {
-        OnPropertyChanged(nameof(TargetSummary));
+        OnPropertyChanged(nameof(HasCameraOverride));
+        NotifyTargetingChanged();
     }
 
     partial void OnEndFrameChanged(string value)
@@ -305,8 +600,17 @@ public partial class RenderQueueItemViewModel : ObservableObject
         OnPropertyChanged(nameof(FrameSummary));
     }
 
+    partial void OnInspectionChanged(BlendInspectionSnapshot? value)
+    {
+        OnPropertyChanged(nameof(AvailableCameraNames));
+        OnPropertyChanged(nameof(AvailableSceneNames));
+        OnPropertyChanged(nameof(AvailableViewLayerNames));
+        NotifyResolvedSettingsChanged();
+    }
+
     partial void OnModeChanged(RenderMode value)
     {
+        OnPropertyChanged(nameof(HasFrameOverride));
         OnPropertyChanged(nameof(FrameSummary));
         OnPropertyChanged(nameof(IsAnimationMode));
         OnPropertyChanged(nameof(IsFrameRangeMode));
@@ -318,6 +622,24 @@ public partial class RenderQueueItemViewModel : ObservableObject
         OnPropertyChanged(nameof(EffectiveName));
     }
 
+    partial void OnOutputFileNameTemplateChanged(string value)
+    {
+        OnPropertyChanged(nameof(HasOutputNameOverride));
+        NotifyResolvedSettingsChanged();
+    }
+
+    partial void OnOutputFormatChanged(string value)
+    {
+        OnPropertyChanged(nameof(HasOutputFormatOverride));
+        NotifyResolvedSettingsChanged();
+    }
+
+    partial void OnOutputPathTemplateChanged(string value)
+    {
+        OnPropertyChanged(nameof(HasOutputPathOverride));
+        NotifyResolvedSettingsChanged();
+    }
+
     partial void OnProgressValueChanged(double value)
     {
         OnPropertyChanged(nameof(ProgressPercentLabel));
@@ -325,7 +647,8 @@ public partial class RenderQueueItemViewModel : ObservableObject
 
     partial void OnSceneNameChanged(string value)
     {
-        OnPropertyChanged(nameof(TargetSummary));
+        OnPropertyChanged(nameof(HasSceneOverride));
+        NotifyTargetingChanged(sceneSelectionChanged: true);
     }
 
     partial void OnSingleFrameChanged(string value)
@@ -345,12 +668,118 @@ public partial class RenderQueueItemViewModel : ObservableObject
 
     partial void OnViewLayerNameChanged(string value)
     {
-        OnPropertyChanged(nameof(TargetSummary));
+        OnPropertyChanged(nameof(HasViewLayerOverride));
+        NotifyTargetingChanged();
+    }
+
+    private string BuildInheritedHint(string? inspectedValue, string label)
+    {
+        return string.IsNullOrWhiteSpace(inspectedValue)
+            ? $"Empty = use {label} from blend."
+            : $"Empty = from blend: {inspectedValue.Trim()}";
+    }
+
+    private void NotifyResolvedSettingsChanged()
+    {
+        OnPropertyChanged(nameof(BlendFrameSummary));
+        OnPropertyChanged(nameof(AvailableCameraNames));
+        OnPropertyChanged(nameof(AvailableViewLayerNames));
+        OnPropertyChanged(nameof(CameraHint));
+        OnPropertyChanged(nameof(HasCameraOverride));
+        OnPropertyChanged(nameof(HasFrameOverride));
+        OnPropertyChanged(nameof(HasInspection));
+        OnPropertyChanged(nameof(HasOutputFormatOverride));
+        OnPropertyChanged(nameof(HasOutputNameOverride));
+        OnPropertyChanged(nameof(HasOutputPathOverride));
+        OnPropertyChanged(nameof(HasSceneOverride));
+        OnPropertyChanged(nameof(HasViewLayerOverride));
+        OnPropertyChanged(nameof(InspectionSummary));
+        OnPropertyChanged(nameof(OutputDirectoryHint));
+        OnPropertyChanged(nameof(OutputFormatHint));
+        OnPropertyChanged(nameof(OutputNameHint));
+        OnPropertyChanged(nameof(ResolvedCameraName));
+        OnPropertyChanged(nameof(ResolvedOutputDirectory));
+        OnPropertyChanged(nameof(ResolvedOutputFormat));
+        OnPropertyChanged(nameof(ResolvedOutputName));
+        OnPropertyChanged(nameof(ResolvedOutputPattern));
+        OnPropertyChanged(nameof(ResolvedSceneName));
+        OnPropertyChanged(nameof(ResolvedViewLayerName));
+        OnPropertyChanged(nameof(SceneHint));
+        OnPropertyChanged(nameof(UsesOutputFallback));
+        OnPropertyChanged(nameof(ViewLayerHint));
+        OnPropertyChanged(nameof(FrameSummary));
+    }
+
+    private void NotifyTargetingChanged(bool sceneSelectionChanged = false)
+    {
+        if (sceneSelectionChanged)
+        {
+            OnPropertyChanged(nameof(AvailableCameraNames));
+            OnPropertyChanged(nameof(AvailableViewLayerNames));
+        }
+
+        OnPropertyChanged(nameof(CameraHint));
+        OnPropertyChanged(nameof(ResolvedCameraName));
+        OnPropertyChanged(nameof(ResolvedSceneName));
+        OnPropertyChanged(nameof(ResolvedViewLayerName));
+        OnPropertyChanged(nameof(SceneHint));
+        OnPropertyChanged(nameof(ViewLayerHint));
+    }
+
+    private OutputDefaults ResolveBlendOutputDefaults()
+    {
+        if (Inspection is null || LooksLikeDefaultBlendOutput(Inspection.RawOutputPath))
+        {
+            return BuildFallbackOutputDefaults();
+        }
+
+        var resolvedOutputPath = Inspection.ResolvedOutputPath.Trim();
+        if (string.IsNullOrWhiteSpace(resolvedOutputPath))
+        {
+            return BuildFallbackOutputDefaults();
+        }
+
+        if (EndsWithDirectorySeparator(Inspection.RawOutputPath) || EndsWithDirectorySeparator(Inspection.ResolvedOutputPath))
+        {
+            return new OutputDefaults(
+                resolvedOutputPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+                BlendFileName,
+                UsesFallback: false);
+        }
+
+        var directory = Path.GetDirectoryName(resolvedOutputPath) ?? string.Empty;
+        var name = StripOutputName(Path.GetFileName(resolvedOutputPath));
+
+        if (string.IsNullOrWhiteSpace(directory))
+        {
+            return BuildFallbackOutputDefaults();
+        }
+
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            name = BlendFileName;
+        }
+
+        return new OutputDefaults(directory, name, UsesFallback: false);
+    }
+
+    private OutputDefaults BuildFallbackOutputDefaults()
+    {
+        var directory = string.IsNullOrWhiteSpace(BlendDirectory)
+            ? string.Empty
+            : Path.Combine(BlendDirectory, "renders");
+        return new OutputDefaults(directory, BlendFileName, UsesFallback: true);
     }
 
     private static string DisplayValue(string? value, string fallback = "Auto")
     {
         return string.IsNullOrWhiteSpace(value) ? fallback : value.Trim();
+    }
+
+    private static bool EndsWithDirectorySeparator(string value)
+    {
+        return !string.IsNullOrWhiteSpace(value) &&
+               (value.EndsWith(Path.DirectorySeparatorChar) || value.EndsWith(Path.AltDirectorySeparatorChar));
     }
 
     private static RenderJobStatus GetInitialStatus(string? blendFilePath)
@@ -360,8 +789,51 @@ public partial class RenderQueueItemViewModel : ObservableObject
             : RenderJobStatus.Ready;
     }
 
+    private static bool LooksLikeDefaultBlendOutput(string? rawOutputPath)
+    {
+        var normalized = (rawOutputPath ?? string.Empty)
+            .Trim()
+            .Replace('\\', '/')
+            .TrimEnd('/');
+
+        return string.IsNullOrWhiteSpace(normalized) ||
+               string.Equals(normalized, "/tmp", StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(normalized, "//tmp", StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(normalized, "//", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string NormalizeLegacyOutputNameOverride(string value)
+    {
+        return string.Equals(value?.Trim(), "[BLEND_NAME]_[FRAME]", StringComparison.OrdinalIgnoreCase)
+            ? string.Empty
+            : value ?? string.Empty;
+    }
+
+    private static string NormalizeLegacyOutputPathOverride(string value)
+    {
+        return string.Equals(value?.Trim(), "[BLEND_PATH]\\renders", StringComparison.OrdinalIgnoreCase)
+            ? string.Empty
+            : value ?? string.Empty;
+    }
+
+    private static string ResolveOverride(string overrideValue, string? inheritedValue)
+    {
+        return string.IsNullOrWhiteSpace(overrideValue)
+            ? inheritedValue?.Trim() ?? string.Empty
+            : overrideValue.Trim();
+    }
+
+    private static string StripOutputName(string fileName)
+    {
+        var nameWithoutExtension = Path.GetFileNameWithoutExtension(fileName ?? string.Empty);
+        var trimmedHashes = nameWithoutExtension.Replace("#", string.Empty, StringComparison.Ordinal);
+        return trimmedHashes.Trim();
+    }
+
     private static string BuildLifecycleLog(string message)
     {
         return $"[{DateTimeOffset.Now:yyyy-MM-dd HH:mm:ss}] {message}";
     }
+
+    private readonly record struct OutputDefaults(string Directory, string Name, bool UsesFallback);
 }

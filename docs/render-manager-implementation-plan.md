@@ -205,11 +205,11 @@ Deliverables:
 - temp or app-data working directory for scripts and logs
 - command builder with `ArgumentList`
 - log capture infrastructure
-- command preview string generation
+- resolved launch-plan logging for diagnostics
 
 Done when:
 
-- tool can build and display a valid Blender command
+- tool can build a valid Blender launch plan for execution and diagnostics
 - logs are written predictably
 
 ## Workstream 4: Blend Inspection
@@ -389,7 +389,7 @@ Sections in detail editor:
 - output naming
 - extra args
 - inspection summary
-- command preview
+- live log focus
 
 ## Subdialogs Or Secondary Panels
 
@@ -582,7 +582,7 @@ Implemented so far:
   - move up and down
   - enable or disable
 - real `Start / Stop / Resume` render execution
-- live command preview and log panel
+- live log panel
 - parsed per-job frame progress
 - queue-wide progress by finished jobs
 - whole-job ETA based on average completed frame time
@@ -590,8 +590,9 @@ Implemented so far:
 
 Current limitations and known issues:
 
-- blend inspection is still not implemented
-- camera, view layer, and collection override fields are not yet passed through to Blender
+- blend inspection is implemented and loaded automatically on add and on manual reload
+- output path, output name, format, frame override, scene, camera, and view-layer overrides are passed through to Blender
+- scene, camera, and view-layer selector interaction is currently laggy and still needs cleanup
 - `Add Blend` currently uses single-file picker behavior, not multi-select
 - old saved queue items may not contain all newer runtime fields until they are rerun
 - the UI still needs cleanup and documentation polish
@@ -600,14 +601,14 @@ Conclusion:
 
 - the tool has moved past shell-only status
 - core local rendering behavior is in place
-- the next work should focus on override support, inspection, and cleanup
+- the next work should focus on selector responsiveness, UI cleanup, and the next override architecture pass
 
 ## Recommended Next Actions
 
 Recommended next work:
 
-1. implement blend inspection and populate scene metadata
-2. pass camera, view layer, and collection overrides into actual Blender execution
-3. decide whether `Add Blend` should support multi-select
-4. continue UI cleanup and documentation updates
-5. expand tests around orchestration and queue persistence
+1. stabilize scene, camera, and view-layer selector responsiveness
+2. decide whether `Add Blend` should support multi-select
+3. continue UI cleanup and documentation updates
+4. expand tests around orchestration and queue persistence
+5. plan the next override or modifier architecture pass

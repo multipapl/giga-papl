@@ -12,6 +12,7 @@ public sealed class RenderManagerTool : IToolDefinition, IStatefulTool
     public RenderManagerTool(IJsonSettingsStore settingsStore, IFilePickerService filePickerService)
     {
         _viewModel = new RenderManagerViewModel(
+            new BlendInspectionService(),
             new RenderManagerSettingsStore(settingsStore),
             new RenderQueueStore(settingsStore),
             filePickerService);

@@ -3,6 +3,8 @@ using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
+using System.Text;
+using System.Text.Json;
 using BlenderToolbox.Core.Abstractions;
 using BlenderToolbox.Core.Presentation;
 using BlenderToolbox.Tools.RenderManager.Models;
@@ -14,22 +16,43 @@ namespace BlenderToolbox.Tools.RenderManager.ViewModels;
 
 public partial class RenderManagerViewModel : ObservableObject
 {
+    private static readonly IReadOnlyList<string> SupportedOutputFormats =
+    [
+        "PNG",
+        "JPEG",
+        "OPEN_EXR",
+        "OPEN_EXR_MULTILAYER",
+        "TIFF",
+        "BMP",
+        "TARGA",
+        "WEBP",
+    ];
+
+    private readonly BlendInspectionService _blendInspectionService;
     private readonly IFilePickerService _filePickerService;
     private readonly RenderQueueStore _queueStore;
+    private readonly string _runtimeDirectory;
     private readonly RenderManagerSettingsStore _settingsStore;
     private readonly SynchronizationContext _uiContext;
     private CancellationTokenSource? _renderCts;
     private int _framesCompleted;
 
     public RenderManagerViewModel(
+        BlendInspectionService blendInspectionService,
         RenderManagerSettingsStore settingsStore,
         RenderQueueStore queueStore,
         IFilePickerService filePickerService)
     {
+        _blendInspectionService = blendInspectionService;
         _settingsStore = settingsStore;
         _queueStore = queueStore;
         _filePickerService = filePickerService;
         _uiContext = SynchronizationContext.Current ?? new SynchronizationContext();
+        _runtimeDirectory = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "BlenderToolbox",
+            "RenderManager",
+            "runtime");
 
         Jobs.CollectionChanged += OnJobsCollectionChanged;
 
@@ -39,6 +62,14 @@ public partial class RenderManagerViewModel : ObservableObject
     }
 
     public ObservableCollection<RenderQueueItemViewModel> Jobs { get; } = [];
+
+    public IReadOnlyList<RenderMode> FrameOverrideModes { get; } =
+    [
+        RenderMode.FrameRange,
+        RenderMode.SingleFrame,
+    ];
+
+    public IReadOnlyList<string> OutputFormats { get; } = SupportedOutputFormats;
 
     public IReadOnlyList<RenderMode> RenderModes { get; } = Enum.GetValues<RenderMode>();
 
@@ -100,15 +131,9 @@ public partial class RenderManagerViewModel : ObservableObject
         }
     }
 
-    public string QueueRunButtonLabel => IsQueueRunning
-        ? "Stop"
-        : HasPausedJobs ? "Resume" : "Start";
-
     public string QueueSummary => Jobs.Count == 0
         ? "Queue is empty."
         : $"{Jobs.Count(static job => job.IsEnabled)} enabled | {Jobs.Count(static job => !job.IsEnabled)} disabled";
-
-    public string SelectedJobCommandPreview => BuildCommandPreview(SelectedJob);
 
     public string SelectedJobLogOutput => string.IsNullOrWhiteSpace(SelectedJob?.LogOutput)
         ? "Render logs will appear here when a job runs."
@@ -120,15 +145,10 @@ public partial class RenderManagerViewModel : ObservableObject
     private string defaultBlenderPath = string.Empty;
 
     [ObservableProperty]
-    private string defaultOutputFileNameTemplate = "[BLEND_NAME]_[FRAME]";
-
-    [ObservableProperty]
-    private string defaultOutputPathTemplate = "[BLEND_PATH]\\renders";
-
-    [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CurrentRunStateText))]
-    [NotifyPropertyChangedFor(nameof(QueueRunButtonLabel))]
-    [NotifyCanExecuteChangedFor(nameof(ToggleQueueRunCommand))]
+    [NotifyCanExecuteChangedFor(nameof(StartQueueCommand))]
+    [NotifyCanExecuteChangedFor(nameof(StopQueueCommand))]
+    [NotifyCanExecuteChangedFor(nameof(ResumeQueueCommand))]
     private bool isQueueRunning;
 
     [ObservableProperty]
@@ -139,11 +159,11 @@ public partial class RenderManagerViewModel : ObservableObject
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasSelectedJob))]
-    [NotifyPropertyChangedFor(nameof(SelectedJobCommandPreview))]
     [NotifyPropertyChangedFor(nameof(SelectedJobLogOutput))]
     [NotifyPropertyChangedFor(nameof(SelectedJobTitle))]
     [NotifyCanExecuteChangedFor(nameof(BrowseSelectedBlendCommand))]
     [NotifyCanExecuteChangedFor(nameof(DuplicateSelectedJobCommand))]
+    [NotifyCanExecuteChangedFor(nameof(InspectSelectedJobCommand))]
     [NotifyCanExecuteChangedFor(nameof(MoveSelectedJobDownCommand))]
     [NotifyCanExecuteChangedFor(nameof(MoveSelectedJobUpCommand))]
     [NotifyCanExecuteChangedFor(nameof(ResetSelectedJobCommand))]
@@ -163,8 +183,6 @@ public partial class RenderManagerViewModel : ObservableObject
         var settings = new RenderManagerSettings
         {
             DefaultBlenderPath = DefaultBlenderPath.Trim(),
-            DefaultOutputPathTemplate = DefaultOutputPathTemplate.Trim(),
-            DefaultOutputFileNameTemplate = DefaultOutputFileNameTemplate.Trim(),
             LastBlendDirectory = LastBlendDirectory.Trim(),
             LastBlenderDirectory = LastBlenderDirectory.Trim(),
         };
@@ -181,7 +199,7 @@ public partial class RenderManagerViewModel : ObservableObject
 
     partial void OnDefaultBlenderPathChanged(string value)
     {
-        OnPropertyChanged(nameof(SelectedJobCommandPreview));
+        InspectSelectedJobCommand.NotifyCanExecuteChanged();
     }
 
     partial void OnSelectedJobChanging(RenderQueueItemViewModel? value)
@@ -197,13 +215,17 @@ public partial class RenderManagerViewModel : ObservableObject
         if (value is not null)
         {
             value.PropertyChanged += OnSelectedJobPropertyChanged;
+            if (!value.HasInspection)
+            {
+                _ = TryInspectJobAsync(value, null);
+            }
         }
 
         RefreshComputedState();
     }
 
     [RelayCommand]
-    private void AddBlend()
+    private async Task AddBlend()
     {
         var selectedPath = _filePickerService.PickFile(
             "Blend files|*.blend|All files|*.*",
@@ -216,33 +238,26 @@ public partial class RenderManagerViewModel : ObservableObject
         }
 
         LastBlendDirectory = Path.GetDirectoryName(selectedPath) ?? string.Empty;
-        var job = RenderQueueItemViewModel.CreateNew(
-            selectedPath,
-            DefaultBlenderPath,
-            DefaultOutputPathTemplate,
-            DefaultOutputFileNameTemplate);
+        var job = RenderQueueItemViewModel.CreateNew(selectedPath);
 
         Jobs.Add(job);
         SelectedJob = job;
         SetStatus($"Added {job.EffectiveName} to the queue.", StatusTone.Success);
+        await TryInspectJobAsync(job, "Loaded blend defaults.");
     }
 
     [RelayCommand]
     private void AddEmptyJob()
     {
-        var job = RenderQueueItemViewModel.CreateNew(
-            string.Empty,
-            DefaultBlenderPath,
-            DefaultOutputPathTemplate,
-            DefaultOutputFileNameTemplate);
+        var job = RenderQueueItemViewModel.CreateNew(string.Empty);
 
         Jobs.Add(job);
         SelectedJob = job;
-        SetStatus("Added an empty queue item. Fill in the blend and targeting fields in the details panel.", StatusTone.Success);
+        SetStatus("Added an empty queue item. Fill in the blend and render fields in the details panel.", StatusTone.Success);
     }
 
     [RelayCommand]
-    private void BrowseDefaultBlender()
+    private async Task BrowseDefaultBlender()
     {
         var selectedPath = _filePickerService.PickFile(
             "Executable files|*.exe|All files|*.*",
@@ -256,11 +271,16 @@ public partial class RenderManagerViewModel : ObservableObject
 
         DefaultBlenderPath = selectedPath;
         LastBlenderDirectory = Path.GetDirectoryName(selectedPath) ?? string.Empty;
-        SetStatus("Updated the default Blender executable for new jobs.", StatusTone.Success);
+        SetStatus("Updated the default Blender executable.", StatusTone.Success);
+
+        if (SelectedJob is not null)
+        {
+            await TryInspectJobAsync(SelectedJob, "Loaded blend defaults.");
+        }
     }
 
     [RelayCommand(CanExecute = nameof(CanOperateOnSelectedJob))]
-    private void BrowseSelectedBlend()
+    private async Task BrowseSelectedBlend()
     {
         if (SelectedJob is null)
         {
@@ -285,6 +305,7 @@ public partial class RenderManagerViewModel : ObservableObject
 
         LastBlendDirectory = Path.GetDirectoryName(selectedPath) ?? string.Empty;
         SetStatus($"Updated source blend for {SelectedJob.EffectiveName}.", StatusTone.Success);
+        await TryInspectJobAsync(SelectedJob, "Reloaded blend defaults.");
     }
 
     [RelayCommand(CanExecute = nameof(CanOperateOnSelectedJob))]
@@ -378,16 +399,33 @@ public partial class RenderManagerViewModel : ObservableObject
         SetStatus($"{SelectedJob.EffectiveName} is now {stateText}.", StatusTone.Success);
     }
 
-    [RelayCommand(CanExecute = nameof(CanToggleQueueRun))]
-    private void ToggleQueueRun()
+    [RelayCommand(CanExecute = nameof(CanStartQueue))]
+    private void StartQueue()
     {
-        if (IsQueueRunning)
+        StartOrResumeQueue(resumePausedJob: false);
+    }
+
+    [RelayCommand(CanExecute = nameof(CanStopQueue))]
+    private void StopQueue()
+    {
+        RequestQueueStop();
+    }
+
+    [RelayCommand(CanExecute = nameof(CanResumeQueue))]
+    private void ResumeQueue()
+    {
+        StartOrResumeQueue(resumePausedJob: true);
+    }
+
+    [RelayCommand(CanExecute = nameof(CanInspectSelectedJob))]
+    private async Task InspectSelectedJob()
+    {
+        if (SelectedJob is null)
         {
-            StopQueue();
             return;
         }
 
-        StartOrResumeQueue();
+        await TryInspectJobAsync(SelectedJob, "Reloaded blend defaults.");
     }
 
     [RelayCommand(CanExecute = nameof(CanOperateOnSelectedJob))]
@@ -404,16 +442,20 @@ public partial class RenderManagerViewModel : ObservableObject
 
     // Render execution
 
-    private void StartOrResumeQueue()
+    private void StartOrResumeQueue(bool resumePausedJob)
     {
-        var job = ResolveQueueJobToStart();
+        var job = ResolveQueueJobToStart(resumePausedJob);
         if (job is null)
         {
-            SetStatus("Add at least one enabled job before starting the queue.", StatusTone.Error);
+            SetStatus(
+                resumePausedJob
+                    ? "There is no paused job to resume."
+                    : "Add at least one enabled job before starting the queue.",
+                StatusTone.Error);
             return;
         }
 
-        var isResume = HasPausedJobs || IsPausedJob(job);
+        var isResume = resumePausedJob && IsPausedJob(job);
         var resumePlan = isResume ? RenderResumePlanner.Create(job) : default;
         SelectedJob = job;
         job.Status = RenderJobStatus.Rendering;
@@ -448,7 +490,7 @@ public partial class RenderManagerViewModel : ObservableObject
         _ = RunQueueAsync(_renderCts.Token, resumePlan);
     }
 
-    private void StopQueue()
+    private void RequestQueueStop()
     {
         _renderCts?.Cancel();
         SetStatus("Stopping... waiting for Blender to exit.", StatusTone.Neutral);
@@ -544,7 +586,14 @@ public partial class RenderManagerViewModel : ObservableObject
 
     private async Task LaunchJobAsync(RenderQueueItemViewModel job, CancellationToken ct, RenderResumePlan resumePlan)
     {
-        var (exePath, arguments) = BuildProcessCommand(job, resumePlan);
+        if (!job.HasInspection)
+        {
+            await TryInspectJobAsync(job, null);
+        }
+
+        var plan = BuildProcessCommand(job, resumePlan);
+        var exePath = plan.ExePath;
+        var arguments = plan.Arguments;
 
         if (string.IsNullOrWhiteSpace(exePath) || !File.Exists(exePath))
         {
@@ -565,8 +614,7 @@ public partial class RenderManagerViewModel : ObservableObject
         // Ensure the output directory exists
         try
         {
-            var resolvedDir = ResolveOutputTemplate(
-                job.OutputPathTemplate.Trim(), job.BlendFilePath.Trim());
+            var resolvedDir = plan.OutputDirectory;
             if (!Directory.Exists(resolvedDir))
             {
                 Directory.CreateDirectory(resolvedDir);
@@ -576,6 +624,11 @@ public partial class RenderManagerViewModel : ObservableObject
         catch (Exception ex)
         {
             AppendLog(job, $"Warning: could not create output directory: {ex.Message}");
+        }
+
+        if (plan.UsesBlendOutputFallback)
+        {
+            AppendLog(job, $"Blend output path is empty or default. Using fallback: {job.ResolvedOutputPattern}");
         }
 
         AppendLog(job, $"> \"{exePath}\" {arguments}");
@@ -780,7 +833,7 @@ public partial class RenderManagerViewModel : ObservableObject
 
     // Process command building
 
-    private (string exePath, string arguments) BuildProcessCommand(RenderQueueItemViewModel job, RenderResumePlan resumePlan)
+    private ProcessCommandPlan BuildProcessCommand(RenderQueueItemViewModel job, RenderResumePlan resumePlan)
     {
         var blenderPath = string.IsNullOrWhiteSpace(job.BlenderExecutablePath)
             ? DefaultBlenderPath
@@ -798,12 +851,11 @@ public partial class RenderManagerViewModel : ObservableObject
             args.Add(Quote(job.SceneName.Trim()));
         }
 
-        if (!string.IsNullOrWhiteSpace(job.OutputPathTemplate))
+        var overrideScriptPath = CreateOverrideScriptIfNeeded(job);
+        if (!string.IsNullOrWhiteSpace(overrideScriptPath))
         {
-            var rawPattern = $"{job.OutputPathTemplate.Trim()}\\{job.OutputFileNameTemplate.Trim()}";
-            var resolved = ResolveOutputTemplate(rawPattern, job.BlendFilePath.Trim());
-            args.Add("--render-output");
-            args.Add(Quote(resolved));
+            args.Add("--python");
+            args.Add(Quote(overrideScriptPath));
         }
 
         switch (job.Mode)
@@ -821,27 +873,28 @@ public partial class RenderManagerViewModel : ObservableObject
             case RenderMode.FrameRange:
                 var rangeStartFrame = resumePlan.HasResumeStartFrame
                     ? resumePlan.ResumeStartFrame.ToString()
-                    : job.StartFrame.Trim();
+                    : ResolveFrameRangeStart(job);
                 if (!string.IsNullOrWhiteSpace(rangeStartFrame))
                 {
                     args.Add("-s");
                     args.Add(rangeStartFrame);
                 }
 
-                if (!string.IsNullOrWhiteSpace(job.EndFrame))
+                var rangeEndFrame = ResolveFrameRangeEnd(job);
+                if (!string.IsNullOrWhiteSpace(rangeEndFrame))
                 {
                     args.Add("-e");
-                    args.Add(job.EndFrame.Trim());
+                    args.Add(rangeEndFrame);
                 }
 
                 args.Add("-j");
-                args.Add(string.IsNullOrWhiteSpace(job.Step) ? "1" : job.Step.Trim());
+                args.Add(ResolveFrameStep(job));
                 args.Add("-a");
                 break;
 
             case RenderMode.SingleFrame:
                 args.Add("--render-frame");
-                args.Add(string.IsNullOrWhiteSpace(job.SingleFrame) ? "1" : job.SingleFrame.Trim());
+                args.Add(ResolveSingleFrame(job));
                 break;
         }
 
@@ -850,18 +903,12 @@ public partial class RenderManagerViewModel : ObservableObject
             args.Add(job.ExtraArgs.Trim());
         }
 
-        return (blenderPath.Trim(), string.Join(" ", args));
-    }
-
-    private static string ResolveOutputTemplate(string template, string blendFilePath)
-    {
-        var blendDir = Path.GetDirectoryName(blendFilePath) ?? string.Empty;
-        var blendName = Path.GetFileNameWithoutExtension(blendFilePath);
-
-        return template
-            .Replace("[BLEND_PATH]", blendDir, StringComparison.OrdinalIgnoreCase)
-            .Replace("[BLEND_NAME]", blendName, StringComparison.OrdinalIgnoreCase)
-            .Replace("[FRAME]", "####", StringComparison.OrdinalIgnoreCase);
+        return new ProcessCommandPlan(
+            blenderPath.Trim(),
+            string.Join(" ", args),
+            overrideScriptPath,
+            job.ResolvedOutputDirectory,
+            job.UsesOutputFallback);
     }
 
     private static int ComputeTotalFrames(RenderQueueItemViewModel job)
@@ -870,9 +917,9 @@ public partial class RenderManagerViewModel : ObservableObject
         {
             RenderMode.SingleFrame => 1,
             RenderMode.FrameRange when
-                int.TryParse(job.StartFrame.Trim(), out var start) &&
-                int.TryParse(job.EndFrame.Trim(), out var end) =>
-                Math.Max(1, (end - start) / (int.TryParse(job.Step.Trim(), out var s) && s > 0 ? s : 1) + 1),
+                int.TryParse(ResolveFrameRangeStart(job), out var start) &&
+                int.TryParse(ResolveFrameRangeEnd(job), out var end) =>
+                Math.Max(1, (end - start) / (int.TryParse(ResolveFrameStep(job), out var s) && s > 0 ? s : 1) + 1),
             _ => 0,
         };
     }
@@ -904,76 +951,195 @@ public partial class RenderManagerViewModel : ObservableObject
         }
     }
 
-    // Command preview (display only, not for execution)
-
-    private string BuildCommandPreview(RenderQueueItemViewModel? job)
+    private async Task TryInspectJobAsync(RenderQueueItemViewModel job, string? successStatusMessage)
     {
-        if (job is null)
+        if (string.IsNullOrWhiteSpace(job.BlendFilePath) || !File.Exists(job.BlendFilePath.Trim()))
         {
-            return "Select a queue item to preview the Blender command.";
+            return;
         }
 
-        var resumePlan = IsPausedJob(job) ? RenderResumePlanner.Create(job) : default;
-        var blenderPath = string.IsNullOrWhiteSpace(job.BlenderExecutablePath)
-            ? DefaultBlenderPath
-            : job.BlenderExecutablePath;
-
-        var arguments = new List<string>
+        var blenderPath = ResolveBlenderPath(job);
+        if (string.IsNullOrWhiteSpace(blenderPath) || !File.Exists(blenderPath))
         {
-            QuoteOrPlaceholder(blenderPath, "<blender.exe>"),
-            "--background",
-            QuoteOrPlaceholder(job.BlendFilePath, "<scene.blend>"),
-        };
+            if (!string.IsNullOrWhiteSpace(successStatusMessage))
+            {
+                SetStatus("Set Blender executable to inspect blend defaults.", StatusTone.Neutral);
+            }
 
-        if (!string.IsNullOrWhiteSpace(job.SceneName))
-        {
-            arguments.Add("--scene");
-            arguments.Add(Quote(job.SceneName.Trim()));
+            return;
         }
 
-        if (!string.IsNullOrWhiteSpace(job.OutputPathTemplate))
+        var previousStatus = job.Status;
+        var canShowInspectingStatus = previousStatus != RenderJobStatus.Rendering;
+
+        try
         {
-            var outputPattern = $"{job.OutputPathTemplate.Trim()}\\{job.OutputFileNameTemplate.Trim()}";
-            arguments.Add("--render-output");
-            arguments.Add(Quote(outputPattern));
+            if (canShowInspectingStatus)
+            {
+                job.Status = RenderJobStatus.Inspecting;
+                RefreshComputedState();
+            }
+
+            var inspection = await _blendInspectionService.InspectAsync(blenderPath, job.BlendFilePath.Trim());
+            job.ApplyInspection(inspection);
+
+            if (canShowInspectingStatus)
+            {
+                job.Status = RenderJobStatus.Ready;
+            }
+
+            AppendLog(
+                job,
+                $"Loaded blend defaults | Scene: {DisplayOrPlaceholder(inspection.SceneName, "n/a")} | Camera: {DisplayOrPlaceholder(inspection.CameraName, "n/a")} | View Layer: {DisplayOrPlaceholder(inspection.ViewLayerName, "n/a")} | Format: {DisplayOrPlaceholder(inspection.OutputFormat, "n/a")}");
+
+            if (!string.IsNullOrWhiteSpace(successStatusMessage))
+            {
+                SetStatus(successStatusMessage, StatusTone.Success);
+            }
+        }
+        catch (Exception ex)
+        {
+            if (canShowInspectingStatus)
+            {
+                job.Status = previousStatus is RenderJobStatus.Inspecting ? RenderJobStatus.Ready : previousStatus;
+            }
+
+            AppendLog(job, $"Blend inspection failed: {ex.Message}");
+            SetStatus($"Blend inspection failed for {job.EffectiveName}.", StatusTone.Error);
+        }
+        finally
+        {
+            RefreshComputedState();
+        }
+    }
+
+    private string CreateOverrideScriptIfNeeded(RenderQueueItemViewModel job)
+    {
+        if (!ShouldCreateOverrideScript(job))
+        {
+            return string.Empty;
         }
 
-        switch (job.Mode)
+        Directory.CreateDirectory(_runtimeDirectory);
+        var scriptPath = Path.Combine(_runtimeDirectory, $"render_overrides_{job.Id}.py");
+        File.WriteAllText(scriptPath, BuildOverrideScript(job), Encoding.UTF8);
+        return scriptPath;
+    }
+
+    private static string BuildOverrideScript(RenderQueueItemViewModel job)
+    {
+        var builder = new StringBuilder();
+        builder.AppendLine("import bpy");
+        builder.AppendLine();
+        builder.AppendLine("scene = bpy.context.scene");
+
+        if (!string.IsNullOrWhiteSpace(job.CameraName))
         {
-            case RenderMode.Animation:
-                if (resumePlan.HasResumeStartFrame)
-                {
-                    arguments.Add("-s");
-                    arguments.Add(resumePlan.ResumeStartFrame.ToString());
-                }
-
-                arguments.Add("--render-anim");
-                break;
-
-            case RenderMode.FrameRange:
-                arguments.Add("-s");
-                arguments.Add(resumePlan.HasResumeStartFrame
-                    ? resumePlan.ResumeStartFrame.ToString()
-                    : DisplayOrPlaceholder(job.StartFrame, "<start>"));
-                arguments.Add("-e");
-                arguments.Add(DisplayOrPlaceholder(job.EndFrame, "<end>"));
-                arguments.Add("-j");
-                arguments.Add(DisplayOrPlaceholder(job.Step, "1"));
-                arguments.Add("-a");
-                break;
-
-            case RenderMode.SingleFrame:
-                arguments.Add("--render-frame");
-                arguments.Add(DisplayOrPlaceholder(job.SingleFrame, "<frame>"));
-                break;
+            builder.AppendLine();
+            builder.AppendLine($"camera_name = {JsonSerializer.Serialize(job.CameraName.Trim())}");
+            builder.AppendLine("camera = bpy.data.objects.get(camera_name)");
+            builder.AppendLine("if camera is None or camera.type != 'CAMERA':");
+            builder.AppendLine("    raise RuntimeError(f'Camera not found: {camera_name}')");
+            builder.AppendLine("scene.camera = camera");
         }
 
-        if (!string.IsNullOrWhiteSpace(job.ExtraArgs))
+        if (!string.IsNullOrWhiteSpace(job.ViewLayerName))
         {
-            arguments.Add(job.ExtraArgs.Trim());
+            builder.AppendLine();
+            builder.AppendLine($"view_layer_name = {JsonSerializer.Serialize(job.ViewLayerName.Trim())}");
+            builder.AppendLine("view_layer = scene.view_layers.get(view_layer_name)");
+            builder.AppendLine("if view_layer is None:");
+            builder.AppendLine("    raise RuntimeError(f'View layer not found: {view_layer_name}')");
+            builder.AppendLine("for item in scene.view_layers:");
+            builder.AppendLine("    item.use = item.name == view_layer_name");
         }
 
-        return string.Join(" ", arguments);
+        if (!string.IsNullOrWhiteSpace(job.ResolvedOutputPattern) &&
+            (job.UsesOutputFallback ||
+             !string.IsNullOrWhiteSpace(job.OutputPathTemplate) ||
+             !string.IsNullOrWhiteSpace(job.OutputFileNameTemplate)))
+        {
+            builder.AppendLine();
+            builder.AppendLine($"scene.render.filepath = {JsonSerializer.Serialize(job.ResolvedOutputPattern)}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(job.OutputFormat))
+        {
+            builder.AppendLine();
+            builder.AppendLine($"scene.render.image_settings.file_format = {JsonSerializer.Serialize(job.OutputFormat.Trim())}");
+        }
+
+        return builder.ToString();
+    }
+
+    private static string ResolveBlenderPath(RenderQueueItemViewModel job, string defaultBlenderPath)
+    {
+        return string.IsNullOrWhiteSpace(job.BlenderExecutablePath)
+            ? defaultBlenderPath.Trim()
+            : job.BlenderExecutablePath.Trim();
+    }
+
+    private string ResolveBlenderPath(RenderQueueItemViewModel job)
+    {
+        return ResolveBlenderPath(job, DefaultBlenderPath);
+    }
+
+    private static string ResolveFrameRangeEnd(RenderQueueItemViewModel job)
+    {
+        if (!string.IsNullOrWhiteSpace(job.EndFrame))
+        {
+            return job.EndFrame.Trim();
+        }
+
+        return job.Inspection is { FrameEnd: > 0 } inspection
+            ? inspection.FrameEnd.ToString()
+            : string.Empty;
+    }
+
+    private static string ResolveFrameRangeStart(RenderQueueItemViewModel job)
+    {
+        if (!string.IsNullOrWhiteSpace(job.StartFrame))
+        {
+            return job.StartFrame.Trim();
+        }
+
+        return job.Inspection is { FrameStart: > 0 } inspection
+            ? inspection.FrameStart.ToString()
+            : string.Empty;
+    }
+
+    private static string ResolveFrameStep(RenderQueueItemViewModel job)
+    {
+        if (!string.IsNullOrWhiteSpace(job.Step))
+        {
+            return job.Step.Trim();
+        }
+
+        return job.Inspection is { FrameStep: > 0 } inspection
+            ? inspection.FrameStep.ToString()
+            : "1";
+    }
+
+    private static string ResolveSingleFrame(RenderQueueItemViewModel job)
+    {
+        if (!string.IsNullOrWhiteSpace(job.SingleFrame))
+        {
+            return job.SingleFrame.Trim();
+        }
+
+        return job.Inspection is { FrameStart: > 0 } inspection
+            ? inspection.FrameStart.ToString()
+            : "1";
+    }
+
+    private static bool ShouldCreateOverrideScript(RenderQueueItemViewModel job)
+    {
+        return !string.IsNullOrWhiteSpace(job.CameraName) ||
+               !string.IsNullOrWhiteSpace(job.OutputFormat) ||
+               !string.IsNullOrWhiteSpace(job.OutputPathTemplate) ||
+               !string.IsNullOrWhiteSpace(job.OutputFileNameTemplate) ||
+               !string.IsNullOrWhiteSpace(job.ViewLayerName) ||
+               (job.UsesOutputFallback && !string.IsNullOrWhiteSpace(job.ResolvedOutputPattern));
     }
 
     // Helpers
@@ -1086,6 +1252,13 @@ public partial class RenderManagerViewModel : ObservableObject
         public int TotalFrames { get; set; }
     }
 
+    private sealed record ProcessCommandPlan(
+        string ExePath,
+        string Arguments,
+        string OverrideScriptPath,
+        string OutputDirectory,
+        bool UsesBlendOutputFallback);
+
     private bool CanMoveSelectedJobDown()
     {
         return SelectedJob is not null && Jobs.IndexOf(SelectedJob) < Jobs.Count - 1;
@@ -1106,9 +1279,24 @@ public partial class RenderManagerViewModel : ObservableObject
         return SelectedJob is not null && !IsQueueRunning && SelectedJob.Status != RenderJobStatus.Rendering;
     }
 
-    private bool CanToggleQueueRun()
+    private bool CanInspectSelectedJob()
     {
-        return IsQueueRunning || Jobs.Any(static job => job.IsEnabled);
+        return SelectedJob is not null && !IsQueueRunning;
+    }
+
+    private bool CanResumeQueue()
+    {
+        return !IsQueueRunning && Jobs.Any(IsPausedJob);
+    }
+
+    private bool CanStartQueue()
+    {
+        return !IsQueueRunning && Jobs.Any(static job => job.IsEnabled && job.Status is RenderJobStatus.Pending or RenderJobStatus.Ready or RenderJobStatus.Inspecting);
+    }
+
+    private bool CanStopQueue()
+    {
+        return IsQueueRunning;
     }
 
     private static bool IsPausedJob(RenderQueueItemViewModel job)
@@ -1120,12 +1308,6 @@ public partial class RenderManagerViewModel : ObservableObject
     {
         var settings = _settingsStore.Load();
         DefaultBlenderPath = settings.DefaultBlenderPath ?? string.Empty;
-        DefaultOutputPathTemplate = string.IsNullOrWhiteSpace(settings.DefaultOutputPathTemplate)
-            ? "[BLEND_PATH]\\renders"
-            : settings.DefaultOutputPathTemplate;
-        DefaultOutputFileNameTemplate = string.IsNullOrWhiteSpace(settings.DefaultOutputFileNameTemplate)
-            ? "[BLEND_NAME]_[FRAME]"
-            : settings.DefaultOutputFileNameTemplate;
         LastBlendDirectory = settings.LastBlendDirectory ?? string.Empty;
         LastBlenderDirectory = settings.LastBlenderDirectory ?? string.Empty;
 
@@ -1167,7 +1349,6 @@ public partial class RenderManagerViewModel : ObservableObject
 
     private void OnSelectedJobPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        OnPropertyChanged(nameof(SelectedJobCommandPreview));
         OnPropertyChanged(nameof(SelectedJobLogOutput));
         OnPropertyChanged(nameof(SelectedJobTitle));
         RefreshComputedState();
@@ -1179,13 +1360,15 @@ public partial class RenderManagerViewModel : ObservableObject
         OnPropertyChanged(nameof(GlobalProgressSummary));
         OnPropertyChanged(nameof(GlobalProgressValue));
         OnPropertyChanged(nameof(HasPausedJobs));
-        OnPropertyChanged(nameof(QueueRunButtonLabel));
         OnPropertyChanged(nameof(QueueSummary));
 
+        InspectSelectedJobCommand.NotifyCanExecuteChanged();
         MoveSelectedJobUpCommand.NotifyCanExecuteChanged();
         MoveSelectedJobDownCommand.NotifyCanExecuteChanged();
         ResetSelectedJobCommand.NotifyCanExecuteChanged();
-        ToggleQueueRunCommand.NotifyCanExecuteChanged();
+        ResumeQueueCommand.NotifyCanExecuteChanged();
+        StartQueueCommand.NotifyCanExecuteChanged();
+        StopQueueCommand.NotifyCanExecuteChanged();
     }
 
     private string ResolveInitialBlendDirectory()
@@ -1220,10 +1403,11 @@ public partial class RenderManagerViewModel : ObservableObject
         return ResolveInitialBlendDirectory();
     }
 
-    private RenderQueueItemViewModel? ResolveQueueJobToStart()
+    private RenderQueueItemViewModel? ResolveQueueJobToStart(bool resumePausedJob)
     {
-        return Jobs.FirstOrDefault(IsPausedJob)
-            ?? Jobs.FirstOrDefault(job => job.IsEnabled
+        return resumePausedJob
+            ? Jobs.FirstOrDefault(IsPausedJob)
+            : Jobs.FirstOrDefault(job => job.IsEnabled
                 && job.Status is RenderJobStatus.Pending or RenderJobStatus.Ready or RenderJobStatus.Inspecting);
     }
 
@@ -1240,11 +1424,6 @@ public partial class RenderManagerViewModel : ObservableObject
     private static string Quote(string value)
     {
         return $"\"{value.Replace("\"", "\\\"")}\"";
-    }
-
-    private static string QuoteOrPlaceholder(string? value, string placeholder)
-    {
-        return string.IsNullOrWhiteSpace(value) ? placeholder : Quote(value.Trim());
     }
 
     private void SetStatus(string message, StatusTone tone)
