@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.Windows;
+using BlenderToolbox.Core.Presentation;
 using Microsoft.Win32;
 
 namespace BlenderToolbox.App.Services;
@@ -17,9 +18,29 @@ public sealed class ThemeManager
         _mergedDictionaries = mergedDictionaries;
     }
 
+    public ThemeOverride CurrentOverride { get; private set; } = ThemeOverride.Auto;
+
+    public void ApplyTheme(ThemeOverride themeOverride)
+    {
+        CurrentOverride = themeOverride;
+        var nextThemeSource = themeOverride switch
+        {
+            ThemeOverride.Light => LightThemeSource,
+            ThemeOverride.Dark => DarkThemeSource,
+            _ => IsLightThemeEnabled() ? LightThemeSource : DarkThemeSource,
+        };
+
+        ApplyThemeSource(nextThemeSource);
+    }
+
     public void ApplySystemTheme()
     {
         var nextThemeSource = IsLightThemeEnabled() ? LightThemeSource : DarkThemeSource;
+        ApplyThemeSource(nextThemeSource);
+    }
+
+    private void ApplyThemeSource(string nextThemeSource)
+    {
         if (string.Equals(_currentThemeDictionary?.Source?.OriginalString, nextThemeSource, StringComparison.OrdinalIgnoreCase))
         {
             return;

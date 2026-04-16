@@ -9,6 +9,7 @@ namespace BlenderToolbox.Tools.RenderManager.Services;
 public sealed class BlendInspectionService
 {
     private const string OutputMarker = "BT_RENDER_MANAGER_INSPECT::";
+    private static readonly SemaphoreSlim InspectionSlots = new(2);
 
     private readonly RenderManagerPaths _paths;
 
@@ -22,60 +23,98 @@ public sealed class BlendInspectionService
         string blendFilePath,
         CancellationToken cancellationToken = default)
     {
-        if (!File.Exists(blenderExecutablePath))
+        await InspectionSlots.WaitAsync(cancellationToken);
+        try
         {
-            throw new InvalidOperationException("Blender executable was not found.");
+            if (!File.Exists(blenderExecutablePath))
+            {
+                throw new InvalidOperationException("Blender executable was not found.");
+            }
+
+            if (!File.Exists(blendFilePath))
+            {
+                throw new InvalidOperationException("Blend file was not found.");
+            }
+
+            var scriptPath = Path.Combine(_paths.InspectionDirectory, $"inspect_blend_defaults_{Guid.NewGuid():N}.py");
+            await File.WriteAllTextAsync(scriptPath, BuildScript(), Encoding.UTF8, cancellationToken);
+
+            var startInfo = new ProcessStartInfo(blenderExecutablePath)
+            {
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                WorkingDirectory = Path.GetDirectoryName(blendFilePath) ?? _paths.InspectionDirectory,
+            };
+
+            startInfo.ArgumentList.Add("--background");
+            startInfo.ArgumentList.Add(blendFilePath);
+            startInfo.ArgumentList.Add("--python");
+            startInfo.ArgumentList.Add(scriptPath);
+
+            using var process = new Process { StartInfo = startInfo };
+            process.Start();
+
+            var stdoutTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
+            var stderrTask = process.StandardError.ReadToEndAsync(cancellationToken);
+
+            try
+            {
+                await process.WaitForExitAsync(cancellationToken).WaitAsync(TimeSpan.FromSeconds(60), cancellationToken);
+            }
+            catch (TimeoutException)
+            {
+                KillProcessTree(process);
+                throw;
+            }
+
+            var stdout = await stdoutTask;
+            var stderr = await stderrTask;
+
+            if (process.ExitCode != 0)
+            {
+                var message = string.IsNullOrWhiteSpace(stderr)
+                    ? "Blend inspection failed."
+                    : stderr.Trim();
+                throw new InvalidOperationException(message);
+            }
+
+            var snapshot = TryParse(stdout) ?? TryParse(stderr);
+            if (snapshot is null)
+            {
+                throw new InvalidOperationException("Blend inspection did not return parseable data.");
+            }
+
+            snapshot.InspectedAtUtc = DateTimeOffset.UtcNow;
+            return snapshot;
+        }
+        catch (TimeoutException ex)
+        {
+            throw new TimeoutException("Inspection timed out. Click Update.", ex);
+        }
+        finally
+        {
+            InspectionSlots.Release();
+        }
+    }
+
+    private static void KillProcessTree(Process process)
+    {
+        if (process.HasExited)
+        {
+            return;
         }
 
-        if (!File.Exists(blendFilePath))
+        try
         {
-            throw new InvalidOperationException("Blend file was not found.");
+            process.Kill(entireProcessTree: true);
+            process.WaitForExit(5000);
         }
-
-        var scriptPath = Path.Combine(_paths.InspectionDirectory, "inspect_blend_defaults.py");
-        await File.WriteAllTextAsync(scriptPath, BuildScript(), Encoding.UTF8, cancellationToken);
-
-        var startInfo = new ProcessStartInfo(blenderExecutablePath)
+        catch
         {
-            UseShellExecute = false,
-            CreateNoWindow = true,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            WorkingDirectory = Path.GetDirectoryName(blendFilePath) ?? _paths.InspectionDirectory,
-        };
-
-        startInfo.ArgumentList.Add("--background");
-        startInfo.ArgumentList.Add(blendFilePath);
-        startInfo.ArgumentList.Add("--python");
-        startInfo.ArgumentList.Add(scriptPath);
-
-        using var process = new Process { StartInfo = startInfo };
-        process.Start();
-
-        var stdoutTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
-        var stderrTask = process.StandardError.ReadToEndAsync(cancellationToken);
-
-        await process.WaitForExitAsync(cancellationToken);
-
-        var stdout = await stdoutTask;
-        var stderr = await stderrTask;
-
-        if (process.ExitCode != 0)
-        {
-            var message = string.IsNullOrWhiteSpace(stderr)
-                ? "Blend inspection failed."
-                : stderr.Trim();
-            throw new InvalidOperationException(message);
+            // Best effort: inspection failure will be surfaced to the caller.
         }
-
-        var snapshot = TryParse(stdout) ?? TryParse(stderr);
-        if (snapshot is null)
-        {
-            throw new InvalidOperationException("Blend inspection did not return parseable data.");
-        }
-
-        snapshot.InspectedAtUtc = DateTimeOffset.UtcNow;
-        return snapshot;
     }
 
     private static string BuildScript()

@@ -175,4 +175,55 @@ public sealed class RenderManagerTests
         Assert.Equal("scene", job.ResolvedOutputName);
         Assert.Equal(@"Q:\shots\renders\scene_####", job.ResolvedOutputPattern);
     }
+
+    [Fact]
+    public void RenderQueueItemViewModel_SceneChangeRescopesCameraAndViewLayerLists()
+    {
+        var job = RenderQueueItemViewModel.CreateNew(@"Q:\shots\scene.blend");
+        job.ApplyInspection(new BlendInspectionSnapshot
+        {
+            SceneName = "Scene_A",
+            AvailableScenes = ["Scene_A", "Scene_B"],
+            AvailableCameras = ["Camera_A", "Camera_B"],
+            AvailableViewLayers = ["Layer_A", "Layer_B"],
+            SceneCameras = new Dictionary<string, List<string>>
+            {
+                ["Scene_A"] = ["Camera_A"],
+                ["Scene_B"] = ["Camera_B"],
+            },
+            SceneViewLayers = new Dictionary<string, List<string>>
+            {
+                ["Scene_A"] = ["Layer_A"],
+                ["Scene_B"] = ["Layer_B"],
+            },
+        });
+
+        job.SceneName = "Scene_B";
+
+        Assert.Equal(["Camera_B"], job.AvailableCameraNames);
+        Assert.Equal(["Layer_B"], job.AvailableViewLayerNames);
+    }
+
+    [Fact]
+    public void RenderQueueItemViewModel_InvalidCameraSelectionIsPreservedWithHint()
+    {
+        var job = RenderQueueItemViewModel.CreateNew(@"Q:\shots\scene.blend");
+        job.ApplyInspection(new BlendInspectionSnapshot
+        {
+            SceneName = "Scene_A",
+            CameraName = "Camera_A",
+            AvailableScenes = ["Scene_A", "Scene_B"],
+            SceneCameras = new Dictionary<string, List<string>>
+            {
+                ["Scene_A"] = ["Camera_A"],
+                ["Scene_B"] = ["Camera_B"],
+            },
+        });
+
+        job.SceneName = "Scene_B";
+        job.CameraName = "Camera_A";
+
+        Assert.Equal("Camera_A", job.CameraName);
+        Assert.Contains("is not in scene", job.CameraHint);
+    }
 }

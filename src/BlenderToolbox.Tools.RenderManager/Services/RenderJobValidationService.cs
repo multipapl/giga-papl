@@ -6,16 +6,16 @@ namespace BlenderToolbox.Tools.RenderManager.Services;
 
 public sealed class RenderJobValidationService
 {
-    public RenderJobValidationResult Validate(RenderQueueItemViewModel job, string defaultBlenderPath)
+    public RenderJobValidationResult Validate(RenderQueueItemViewModel job, string globalBlenderPath)
     {
         var result = new RenderJobValidationResult();
         var blenderPath = string.IsNullOrWhiteSpace(job.BlenderExecutablePath)
-            ? defaultBlenderPath.Trim()
+            ? globalBlenderPath.Trim()
             : job.BlenderExecutablePath.Trim();
 
         if (string.IsNullOrWhiteSpace(blenderPath) || !File.Exists(blenderPath))
         {
-            result.Errors.Add("Blender executable was not found.");
+            result.Errors.Add("Configure Blender in Settings.");
         }
 
         if (string.IsNullOrWhiteSpace(job.BlendFilePath) || !File.Exists(job.BlendFilePath.Trim()))
@@ -45,18 +45,6 @@ public sealed class RenderJobValidationService
         if (job.HasViewLayerOverride && !Contains(job.AvailableViewLayerNames, job.ViewLayerName))
         {
             result.Errors.Add($"View layer override was not found in the blend: {job.ViewLayerName}");
-        }
-
-        if (job.HasCollectionOverride)
-        {
-            var missingCollections = RenderCollectionOverrideParser.Parse(job.CollectionOverrides)
-                .Where(name => !Contains(job.AvailableCollectionNames, name))
-                .ToList();
-
-            if (missingCollections.Count > 0)
-            {
-                result.Errors.Add($"Collection overrides were not found in the blend: {string.Join(", ", missingCollections)}");
-            }
         }
 
         if (string.IsNullOrWhiteSpace(job.ResolvedOutputDirectory))

@@ -1,4 +1,5 @@
 using BlenderToolbox.Core.Abstractions;
+using BlenderToolbox.Core.Services;
 using BlenderToolbox.Tools.SplitByContext.Services;
 using BlenderToolbox.Tools.SplitByContext.ViewModels;
 using BlenderToolbox.Tools.SplitByContext.Views;
@@ -9,11 +10,15 @@ public sealed class SplitByContextTool : IToolDefinition, IStatefulTool
 {
     private readonly SplitByContextViewModel _viewModel;
 
-    public SplitByContextTool(IJsonSettingsStore settingsStore, IFilePickerService filePickerService)
+    public SplitByContextTool(
+        IJsonSettingsStore settingsStore,
+        GlobalSettingsService globalSettingsService,
+        IFilePickerService filePickerService)
     {
         _viewModel = new SplitByContextViewModel(
             new SplitByContextService(),
             settingsStore,
+            globalSettingsService,
             filePickerService);
 
         View = new SplitByContextView

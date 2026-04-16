@@ -67,25 +67,21 @@ Recommended project shape:
 - Single-machine render queue.
 - Add one or many `.blend` files to queue.
 - Per-job config:
-  - Blender executable/version
+  - optional Blender executable override; empty inherits global Settings
   - render mode: `Animation`, `Frame Range`, `Single Frame`
   - scene
   - camera
   - view layer
-  - collection overrides
   - output path pattern
   - output file name pattern
-  - optional extra Blender args
 - Queue actions:
   - add
   - remove
   - duplicate
-  - reorder
+  - reorder by drag and drop
   - enable or disable job
-  - start selected job
   - start full queue
-  - stop current job
-  - stop queue after current frame or current job
+  - stop after current frame
 - Runtime feedback:
   - current state
   - stdout and stderr log
@@ -163,7 +159,7 @@ The new tool should add a few repo-specific improvements instead of copying the 
 - stronger separation between UI, queue state, and Blender invocation
 - deterministic JSON schemas for settings and queue
 - generated helper scripts as embedded resources or templates owned by this repo
-- compact blend metadata card with manual `Reload .blend` action, live logs, and a latest-frame preview instead of a permanent command-preview panel
+- compact blend metadata card with manual `Update` action, live logs, and a latest-frame preview instead of a permanent command-preview panel
 - structured error model instead of parsing only free-form text
 - easier future testability for process building and output parsing
 
@@ -186,15 +182,13 @@ Each queue item must contain:
 - unique id
 - enabled flag
 - source blend path
-- selected Blender executable tag or absolute path
+- optional Blender executable override
 - render mode
 - frame selection data
 - scene name
 - camera name
 - view layer name
-- collection overrides
 - output naming config
-- extra args
 - status
 - timestamps
 - progress counters
@@ -215,22 +209,18 @@ Suggested statuses:
 
 ## Blender Discovery And Selection
 
-The tool must support:
+The app supports:
 
-- one default Blender executable
-- optional list of named Blender versions
-- per-job override
+- one global Blender executable path in `Settings`
+- per-job override in Render Manager
 
-The first version may use a simple settings JSON similar in spirit to the reference app:
+The global settings file is:
 
 ```json
 {
-  "blenders": {
-    "Default": {
-      "path": "C:/Program Files/Blender Foundation/Blender 4.5/blender.exe",
-      "version": "4.5.3"
-    }
-  }
+  "BlenderExecutablePath": "C:/Program Files/Blender Foundation/Blender 4.5/blender.exe",
+  "ThemeOverride": "Auto",
+  "LogsExpanded": true
 }
 ```
 
@@ -292,7 +282,7 @@ Rules:
 - keep path and filename templates separate
 - support optional node output rewrite only if the helper script can do it reliably
 
-## Collections And View Layers
+## View Layers
 
 The reference app exposes collection toggles and view-layer compositing behavior.
 For this toolbox, keep it simpler.
@@ -300,8 +290,7 @@ For this toolbox, keep it simpler.
 V1:
 
 - select one view layer
-- optional collection include or exclude overrides
-- apply overrides through a helper Python script
+- apply selected view layer through a helper Python script
 
 Deferred:
 
@@ -317,7 +306,7 @@ That is too much for V1.
 V1:
 
 - default device behavior is whatever the selected Blender installation uses
-- optional job-level toggle: `Force CPU` or `Default`
+- no device-mode UI is exposed
 
 V1.5:
 
@@ -340,7 +329,6 @@ Each job builds a Blender command from:
 - frame arguments
 - render arguments
 - helper scripts
-- extra args
 
 The tool must provide:
 
@@ -370,15 +358,17 @@ Recommended log policy:
 
 Persist separately:
 
-- global tool settings
+- global app settings
+- Render Manager tool settings
 - saved queue
 - optional preset definitions
 
 Recommended files:
 
-- `%AppData%/BlenderToolbox/RenderManager/settings.json`
-- `%AppData%/BlenderToolbox/RenderManager/queue.json`
-- `%AppData%/BlenderToolbox/RenderManager/presets.json`
+- `%LocalAppData%/BlenderToolbox/global.json`
+- `%LocalAppData%/BlenderToolbox/RenderManager/settings.json`
+- `%LocalAppData%/BlenderToolbox/RenderManager/queue.json`
+- `%LocalAppData%/BlenderToolbox/RenderManager/presets.json`
 
 ## UX Spec
 
@@ -412,12 +402,10 @@ Queue columns:
 - `Add Blend`
 - `Duplicate`
 - `Remove`
-- `Move Up`
-- `Move Down`
-- `Reload .blend`
-- `Render Selected`
-- `Render Queue`
+- `Update`
+- `Start`
 - `Stop`
+- `Resume`
 - `Open Output Folder`
 
 ## Editing Model
@@ -483,7 +471,6 @@ This tool should own a small set of repo-local helper scripts, generated or copi
 - inspect blend metadata
 - apply output path overrides
 - apply view layer selection
-- apply collection overrides
 - optional force quit on selected completion behavior
 
 All helper scripts must be versioned in this repo.
@@ -556,7 +543,7 @@ Manual test matrix:
 ## Phase 4
 
 - output naming templates
-- collection overrides
+- collection overrides, if they return as an explicit user need
 - queue persistence
 
 ## Phase 5
@@ -571,9 +558,9 @@ These decisions should be made before implementation starts:
 
 1. Should `Frame Range` support sparse lists in V1 or only start/end/step?
 2. Should output-path rewriting also touch compositor `OUTPUT_FILE` nodes in V1?
-3. Should collection overrides be include-based, exclude-based, or both?
+3. Should collection overrides return at all; if yes, should they be include-based, exclude-based, or both?
 4. Should the tool keep one active render at a time only, or allow limited local parallelism later?
-5. Should Blend inspection be automatic on add, or manual via `Reload .blend`?
+5. Should Blend inspection be automatic on add, or manual via `Update`?
 
 ## Recommended Default Answers
 
@@ -597,7 +584,7 @@ The first release is successful if:
 
 ## Current Implementation Note
 
-Date: `2026-04-15`
+Date: `2026-04-16`
 
 `Render Manager` is now a working in-repo tool with real Blender process execution and blend inspection.
 
@@ -605,20 +592,22 @@ What the current implementation already covers:
 
 - tool project scaffold
 - shell registration
-- persisted settings
+- global Settings screen with shared Blender path and theme override
+- persisted Render Manager settings
 - persisted queue
-- queue actions for add, duplicate, reset, remove, reorder, and enable or disable
-- real `Start / Stop / Resume` process execution
+- queue actions for add, duplicate, reset, remove, drag-reorder, and enable or disable
+- real `Start / Stop / Resume` process execution; Stop requests halt after the current frame
 - automatic and manual blend inspection with scene, camera, view-layer, frame, and output metadata
-- live log output
+- buffered live log output plus per-job log files
 - parsed per-job frame progress
 - queue-wide discrete progress by finished jobs
 - whole-job ETA based on average completed frame time
 - resume from the current or next frame instead of restarting the whole job
+- latest-frame preview decode is lazy and only runs for the selected job
 
 What is still not at release quality:
 
-- scene, camera, and view-layer selectors still feel laggy in the current UI and need a cleanup pass before broader override work
+- the planned sub-VM split is now present under `ViewModels/Jobs`; `RenderQueueItemViewModel` remains as a thin compatibility adapter while older services and commands move over incrementally
 - old saved queue entries may not contain newer runtime fields until they are rerun
 - UI polish and documentation still need cleanup passes
 

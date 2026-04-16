@@ -1,0 +1,119 @@
+<UserControl x:Class="BlenderToolbox.App.Views.SettingsScreenView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:core="clr-namespace:BlenderToolbox.Core.Presentation;assembly=BlenderToolbox.Core"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d">
+    <ScrollViewer VerticalScrollBarVisibility="Auto"
+                  HorizontalScrollBarVisibility="Disabled">
+        <Border Style="{StaticResource PanelCardStyle}">
+            <StackPanel>
+                <TextBlock Style="{StaticResource SectionTitleTextStyle}"
+                           Text="Application Settings" />
+                <TextBlock Margin="0,6,0,0"
+                           Style="{StaticResource HelperTextStyle}"
+                           Text="Changes apply immediately to all tools." />
+
+                <Grid Margin="0,18,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="170" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="18" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="18" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="18" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <TextBlock Grid.Row="0"
+                               Grid.Column="0"
+                               Margin="0,8,16,0"
+                               Style="{StaticResource FieldLabelTextStyle}"
+                               Text="Blender Executable Path" />
+                    <StackPanel Grid.Row="0"
+                                Grid.Column="1">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="12" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBox Grid.Column="0"
+                                     Text="{Binding BlenderExecutablePath, UpdateSourceTrigger=PropertyChanged}" />
+                            <Button Grid.Column="2"
+                                    MinWidth="92"
+                                    Style="{StaticResource SecondaryButtonStyle}"
+                                    Command="{Binding BrowseBlenderCommand}"
+                                    Content="Browse" />
+                        </Grid>
+                        <TextBlock Margin="0,6,0,0"
+                                   Style="{StaticResource StatusMessageTextStyle}"
+                                   Tag="{Binding BlenderPathTone}"
+                                   Text="{Binding BlenderPathHelper}" />
+                    </StackPanel>
+
+                    <TextBlock Grid.Row="2"
+                               Grid.Column="0"
+                               Margin="0,8,16,0"
+                               Style="{StaticResource FieldLabelTextStyle}"
+                               Text="Theme" />
+                    <ComboBox Grid.Row="2"
+                              Grid.Column="1"
+                              Width="220"
+                              HorizontalAlignment="Left"
+                              ItemsSource="{Binding ThemeOverrides}"
+                              SelectedItem="{Binding ThemeOverride, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+
+                    <TextBlock Grid.Row="4"
+                               Grid.Column="0"
+                               Margin="0,8,16,0"
+                               Style="{StaticResource FieldLabelTextStyle}"
+                               Text="Log Folder" />
+                    <Grid Grid.Row="4"
+                          Grid.Column="1">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="12" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0"
+                                   Margin="0,8,0,0"
+                                   Style="{StaticResource HelperTextStyle}"
+                                   Text="{Binding LogFolder}" />
+                        <Button Grid.Column="2"
+                                MinWidth="92"
+                                Style="{StaticResource SecondaryButtonStyle}"
+                                Command="{Binding RevealLogFolderCommand}"
+                                Content="Reveal" />
+                    </Grid>
+
+                    <TextBlock Grid.Row="6"
+                               Grid.Column="0"
+                               Margin="0,8,16,0"
+                               Style="{StaticResource FieldLabelTextStyle}"
+                               Text="App Data" />
+                    <StackPanel Grid.Row="6"
+                                Grid.Column="1">
+                        <Button Width="190"
+                                HorizontalAlignment="Left"
+                                Style="{StaticResource SecondaryButtonStyle}"
+                                Command="{Binding OpenAppDataFolderCommand}"
+                                Content="Open App Data Folder" />
+                        <TextBlock Margin="0,8,0,0"
+                                   Style="{StaticResource HelperTextStyle}"
+                                   Text="{Binding AppDataFolder}" />
+                        <TextBlock Margin="0,8,0,0"
+                                   Style="{StaticResource StatusMessageTextStyle}"
+                                   Tag="{x:Static core:StatusTone.Error}"
+                                   Text="{Binding SaveError}" />
+                    </StackPanel>
+                </Grid>
+            </StackPanel>
+        </Border>
+    </ScrollViewer>
+</UserControl>

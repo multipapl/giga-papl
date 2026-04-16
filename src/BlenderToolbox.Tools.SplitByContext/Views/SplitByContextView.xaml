@@ -19,7 +19,7 @@
                                Text="Inputs" />
                     <TextBlock Margin="0,6,0,0"
                                Style="{StaticResource HelperTextStyle}"
-                               Text="Choose the executable and the source .blend file. The split runs headlessly and writes one output file per active context." />
+                               Text="Choose the source .blend file. The split runs headlessly with the Blender executable from Settings and writes one output file per active context." />
 
                     <Grid Margin="0,16,0,0">
                         <Grid.ColumnDefinitions>
@@ -35,23 +35,12 @@
                                    Grid.Column="0"
                                    Margin="0,8,0,0"
                                    Style="{StaticResource FieldLabelTextStyle}"
-                                   Text="Executable path" />
-                        <Grid Grid.Row="0"
-                              Grid.Column="1">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-
-                            <TextBox Grid.Column="0"
-                                     Margin="0,0,12,0"
-                                     Text="{Binding ExecutablePath, UpdateSourceTrigger=PropertyChanged}" />
-                            <Button Grid.Column="1"
-                                    MinWidth="92"
-                                    Style="{StaticResource SecondaryButtonStyle}"
-                                    Command="{Binding BrowseExecutableCommand}"
-                                    Content="Browse" />
-                        </Grid>
+                                   Text="Blender" />
+                        <TextBlock Grid.Row="0"
+                                   Grid.Column="1"
+                                   Margin="0,8,0,0"
+                                   Style="{StaticResource HelperTextStyle}"
+                                   Text="{Binding BlenderHelperText}" />
 
                         <TextBlock Grid.Row="1"
                                    Grid.Column="0"

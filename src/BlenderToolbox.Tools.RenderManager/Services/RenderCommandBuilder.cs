@@ -52,10 +52,10 @@ public sealed class RenderCommandBuilder
         _scriptBuilder = scriptBuilder;
     }
 
-    public RenderCommandPlan Build(RenderQueueItemViewModel job, string defaultBlenderPath, RenderResumePlan resumePlan)
+    public RenderCommandPlan Build(RenderQueueItemViewModel job, string globalBlenderPath, RenderResumePlan resumePlan)
     {
         var blenderPath = string.IsNullOrWhiteSpace(job.BlenderExecutablePath)
-            ? defaultBlenderPath.Trim()
+            ? globalBlenderPath.Trim()
             : job.BlenderExecutablePath.Trim();
 
         var arguments = new List<string>
@@ -110,11 +110,6 @@ public sealed class RenderCommandBuilder
                 break;
         }
 
-        foreach (var extraArgument in SplitExtraArgs(job.ExtraArgs))
-        {
-            arguments.Add(extraArgument);
-        }
-
         return new RenderCommandPlan
         {
             ExecutablePath = blenderPath,
@@ -125,47 +120,6 @@ public sealed class RenderCommandBuilder
             UsesBlendOutputFallback = job.UsesOutputFallback,
             WorkingDirectory = Path.GetDirectoryName(job.BlendFilePath.Trim()) ?? _paths.RuntimeDirectory,
         };
-    }
-
-    private static IReadOnlyList<string> SplitExtraArgs(string? extraArgs)
-    {
-        if (string.IsNullOrWhiteSpace(extraArgs))
-        {
-            return [];
-        }
-
-        var result = new List<string>();
-        var current = new StringBuilder();
-        var inQuotes = false;
-
-        foreach (var character in extraArgs.Trim())
-        {
-            if (character == '"')
-            {
-                inQuotes = !inQuotes;
-                continue;
-            }
-
-            if (char.IsWhiteSpace(character) && !inQuotes)
-            {
-                if (current.Length > 0)
-                {
-                    result.Add(current.ToString());
-                    current.Clear();
-                }
-
-                continue;
-            }
-
-            current.Append(character);
-        }
-
-        if (current.Length > 0)
-        {
-            result.Add(current.ToString());
-        }
-
-        return result;
     }
 
     private static string BuildDisplayText(string executablePath, IReadOnlyList<string> arguments)

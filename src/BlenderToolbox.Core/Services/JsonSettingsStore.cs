@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using BlenderToolbox.Core.Abstractions;
 
 namespace BlenderToolbox.Core.Services;
@@ -9,6 +10,7 @@ public sealed class JsonSettingsStore : IJsonSettingsStore
     {
         PropertyNameCaseInsensitive = true,
         WriteIndented = true,
+        Converters = { new JsonStringEnumConverter() },
     };
 
     private readonly string _settingsDirectory;

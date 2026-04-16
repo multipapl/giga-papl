@@ -1,6 +1,5 @@
 using System.Text;
 using System.Text.Json;
-using BlenderToolbox.Tools.RenderManager.Models;
 using BlenderToolbox.Tools.RenderManager.ViewModels;
 
 namespace BlenderToolbox.Tools.RenderManager.Services;
@@ -49,40 +48,11 @@ public sealed class RenderOverrideScriptBuilder
             builder.AppendLine("    item.use = item.name == view_layer_name");
         }
 
-        if (job.HasCollectionOverride)
-        {
-            var collections = RenderCollectionOverrideParser.Parse(job.CollectionOverrides);
-            builder.AppendLine();
-            builder.AppendLine($"excluded_collections = set({Serialize(collections)})");
-            builder.AppendLine("def walk_layer_collections(layer_collection):");
-            builder.AppendLine("    yield layer_collection");
-            builder.AppendLine("    for child in layer_collection.children:");
-            builder.AppendLine("        yield from walk_layer_collections(child)");
-            builder.AppendLine("for view_layer in scene.view_layers:");
-            builder.AppendLine("    for layer_collection in walk_layer_collections(view_layer.layer_collection):");
-            builder.AppendLine("        collection = getattr(layer_collection, 'collection', None)");
-            builder.AppendLine("        if collection and collection.name in excluded_collections:");
-            builder.AppendLine("            layer_collection.exclude = True");
-        }
-
         if (!string.IsNullOrWhiteSpace(job.ResolvedOutputPattern) &&
             (job.UsesOutputFallback || job.HasOutputPathOverride || job.HasOutputNameOverride))
         {
             builder.AppendLine();
             builder.AppendLine($"scene.render.filepath = {Serialize(job.ResolvedOutputPattern)}");
-        }
-
-        if (job.HasOutputFormatOverride)
-        {
-            builder.AppendLine();
-            builder.AppendLine($"scene.render.image_settings.file_format = {Serialize(job.OutputFormat)}");
-        }
-
-        if (job.DeviceMode == RenderDeviceMode.ForceCpu)
-        {
-            builder.AppendLine();
-            builder.AppendLine("if scene.render.engine == 'CYCLES' and hasattr(scene, 'cycles'):");
-            builder.AppendLine("    scene.cycles.device = 'CPU'");
         }
 
         return builder.ToString();
@@ -93,12 +63,9 @@ public sealed class RenderOverrideScriptBuilder
         return job.HasSceneOverride ||
                job.HasCameraOverride ||
                job.HasViewLayerOverride ||
-               job.HasCollectionOverride ||
-               job.HasOutputFormatOverride ||
                job.HasOutputNameOverride ||
                job.HasOutputPathOverride ||
-               (job.UsesOutputFallback && !string.IsNullOrWhiteSpace(job.ResolvedOutputPattern)) ||
-               job.DeviceMode != RenderDeviceMode.Default;
+               (job.UsesOutputFallback && !string.IsNullOrWhiteSpace(job.ResolvedOutputPattern));
     }
 
     private static string Serialize<T>(T value)

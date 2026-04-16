@@ -12,7 +12,7 @@ The app should be built around the concept of **overrides**. Each render job fie
 inherits its value from the `.blend` file by default and can be explicitly overridden:
 
 - **Output path** - use the path set in the blend file, or override with a custom path.
-- **Output filename & format** - same principle.
+- **Output filename** - same principle. Output format is inherited from the `.blend` file.
 - **Frame range** - render what the blend file specifies, or override start/end/step.
 - **Camera, scene, view layer** - inherit or override.
 
@@ -23,10 +23,11 @@ UI hint: each overridable field should have a checkbox on the left.
 Unchecked = inherit from the `.blend` file.
 Checked = enable the field or dropdown and use the override value.
 
-Current prototype note:
+Current implementation note:
 
-- scene, camera, and view layer selection works but still feels laggy in the current UI
-- selector responsiveness should be stabilized before deeper override or modifier work continues
+- scene, camera, and view-layer lists are populated through blend inspection
+- changing scene re-scopes camera and view-layer lists without clearing a stored out-of-list value
+- selectors are disabled while inspection is pending, running, or failed
 
 ## 2. Simplified Toolbar
 
@@ -35,19 +36,22 @@ The only queue-level actions needed:
 | Action | Notes |
 |--------|-------|
 | **Start** | Begin rendering the queue from the first enabled/pending job |
-| **Stop** | Kill the running Blender process, mark job as canceled |
+| **Stop** | Request stop after the current frame, then mark the job as canceled |
 | **Resume** | Continue from the paused/canceled job |
 | **Add .blend** | File picker to add a new job |
 | **Remove** | Remove selected job(s) from the queue |
-| **Reorder** | Move up / Move down (or drag & drop later) |
+| **Reorder** | Drag & drop rows in the queue grid |
 
 Start / Stop / Resume buttons must be visually prominent (larger, colored, separated
 from the rest of the toolbar).
 
 ## 3. Global Blender Executable Setting
 
-The Blender executable path is used across multiple tools in the app (Frame Rename,
-Split by Context, Render Manager). It should move to a **global app settings page**.
+Status: implemented.
+
+The Blender executable path is shared by Split by Context and Render Manager through
+the app-level `Settings` screen. Lazy Frame Rename does not use Blender and is
+unaffected.
 
 Each render job retains a per-job override field: if populated, that job uses its own
 Blender; if empty, it inherits the global default. Same override/modifier pattern as #1.
@@ -87,18 +91,19 @@ Follow-up polish that may still be useful later:
 
 ### Where to store
 
-Current app data location: `%AppData%/BlenderToolbox/RenderManager/`
+Current app data location: `%LocalAppData%/BlenderToolbox/RenderManager/`
 
 Proposal:
 
-- **Per-job log files**: `%AppData%/BlenderToolbox/RenderManager/logs/<job_id>.log`
+- **Per-job log files**: `%LocalAppData%/BlenderToolbox/RenderManager/logs/<job_id>.log`
 - **In-memory log**: kept in `RenderQueueItemViewModel.LogOutput` for UI display
 - consider log rotation or max-size limits for long animation renders
 
 ### Current storage locations
 
-- Settings: `%AppData%/BlenderToolbox/RenderManager/settings.json`
-- Queue state: `%AppData%/BlenderToolbox/RenderManager/queue.json`
+- Global settings: `%LocalAppData%/BlenderToolbox/global.json`
+- Render Manager settings: `%LocalAppData%/BlenderToolbox/RenderManager/settings.json`
+- Queue state: `%LocalAppData%/BlenderToolbox/RenderManager/queue.json`
 
 ## 7. Renderset Integration (Backlog)
 

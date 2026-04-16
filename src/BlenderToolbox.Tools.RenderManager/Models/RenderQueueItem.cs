@@ -10,21 +10,13 @@ public sealed class RenderQueueItem
 
     public bool CameraOverrideEnabled { get; set; }
 
-    public string CollectionOverrides { get; set; } = string.Empty;
-
-    public bool CollectionOverrideEnabled { get; set; }
-
     public double CompletedFrameRenderSeconds { get; set; }
-
-    public RenderDeviceMode DeviceMode { get; set; } = RenderDeviceMode.Default;
 
     public string ElapsedText { get; set; } = string.Empty;
 
     public string EndFrame { get; set; } = string.Empty;
 
     public string EtaText { get; set; } = string.Empty;
-
-    public string ExtraArgs { get; set; } = string.Empty;
 
     public bool FrameOverrideEnabled { get; set; }
 
@@ -57,10 +49,6 @@ public sealed class RenderQueueItem
     public string OutputFileNameTemplate { get; set; } = "[BLEND_NAME]_[FRAME]";
 
     public bool OutputFileNameOverrideEnabled { get; set; }
-
-    public string OutputFormat { get; set; } = string.Empty;
-
-    public bool OutputFormatOverrideEnabled { get; set; }
 
     public string OutputPathTemplate { get; set; } = "[BLEND_PATH]\\renders";
 

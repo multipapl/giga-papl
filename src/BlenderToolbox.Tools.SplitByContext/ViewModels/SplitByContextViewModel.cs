@@ -1,6 +1,7 @@
 using System.IO;
 using BlenderToolbox.Core.Abstractions;
 using BlenderToolbox.Core.Presentation;
+using BlenderToolbox.Core.Services;
 using BlenderToolbox.Tools.SplitByContext.Models;
 using BlenderToolbox.Tools.SplitByContext.Services;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -13,24 +14,31 @@ public partial class SplitByContextViewModel : ObservableObject
     private const string SettingsFileName = "split-by-context.json";
 
     private readonly IFilePickerService _filePickerService;
+    private readonly GlobalSettingsService _globalSettingsService;
     private readonly IJsonSettingsStore _settingsStore;
     private readonly SplitByContextService _splitByContextService;
 
     public SplitByContextViewModel(
         SplitByContextService splitByContextService,
         IJsonSettingsStore settingsStore,
+        GlobalSettingsService globalSettingsService,
         IFilePickerService filePickerService)
     {
         _splitByContextService = splitByContextService;
         _settingsStore = settingsStore;
+        _globalSettingsService = globalSettingsService;
         _filePickerService = filePickerService;
+        _globalSettingsService.Changed += OnGlobalSettingsChanged;
 
         LoadSettings();
         SetStatus("Ready", StatusTone.Neutral);
     }
 
-    [ObservableProperty]
-    private string executablePath = string.Empty;
+    public string BlenderExecutablePath => _globalSettingsService.Current.BlenderExecutablePath.Trim();
+
+    public string BlenderHelperText => string.IsNullOrWhiteSpace(BlenderExecutablePath)
+        ? "Blender is not configured. Open Settings."
+        : $"Blender: {BlenderExecutablePath}";
 
     [ObservableProperty]
     private bool isBusy;
@@ -51,25 +59,10 @@ public partial class SplitByContextViewModel : ObservableObject
     {
         var settings = new SplitByContextSettings
         {
-            ExecutablePath = ExecutablePath.Trim(),
             SceneFilePath = SceneFilePath.Trim(),
         };
 
         _settingsStore.Save(SettingsFileName, settings);
-    }
-
-    [RelayCommand]
-    private void BrowseExecutable()
-    {
-        var selectedPath = _filePickerService.PickFile(
-            "Executable files|*.exe|All files|*.*",
-            Path.GetDirectoryName(ExecutablePath),
-            "Choose the executable");
-
-        if (!string.IsNullOrWhiteSpace(selectedPath))
-        {
-            ExecutablePath = selectedPath;
-        }
     }
 
     [RelayCommand]
@@ -101,7 +94,7 @@ public partial class SplitByContextViewModel : ObservableObject
 
             var result = await _splitByContextService.SplitAsync(new SplitByContextRequest
             {
-                ExecutablePath = ExecutablePath.Trim(),
+                ExecutablePath = BlenderExecutablePath,
                 SceneFilePath = SceneFilePath.Trim(),
             });
 
@@ -125,8 +118,13 @@ public partial class SplitByContextViewModel : ObservableObject
     private void LoadSettings()
     {
         var settings = _settingsStore.Load<SplitByContextSettings>(SettingsFileName);
-        ExecutablePath = settings.ExecutablePath ?? string.Empty;
         SceneFilePath = settings.SceneFilePath ?? string.Empty;
+    }
+
+    private void OnGlobalSettingsChanged(object? sender, EventArgs e)
+    {
+        OnPropertyChanged(nameof(BlenderExecutablePath));
+        OnPropertyChanged(nameof(BlenderHelperText));
     }
 
     private void SetStatus(string message, StatusTone tone)

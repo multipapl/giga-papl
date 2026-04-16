@@ -73,7 +73,6 @@ public sealed class RenderManagerArchitectureTests
         job.OutputPathTemplate = Path.Combine(temp.RootPath, "renders");
         job.OutputFileNameOverrideEnabled = true;
         job.OutputFileNameTemplate = "shot_[FRAME]";
-        job.ExtraArgs = "--cycles-device CPU";
 
         var plan = builder.Build(job, temp.BlenderPath, default);
 
@@ -89,8 +88,6 @@ public sealed class RenderManagerArchitectureTests
         Assert.Contains("2", plan.Arguments);
         Assert.Contains("-a", plan.Arguments);
         Assert.Contains("--python", plan.Arguments);
-        Assert.Contains("--cycles-device", plan.Arguments);
-        Assert.Contains("CPU", plan.Arguments);
         Assert.True(File.Exists(plan.OverrideScriptPath));
     }
 
@@ -103,7 +100,6 @@ public sealed class RenderManagerArchitectureTests
 
         settingsStore.Save(new RenderManagerSettings
         {
-            DefaultBlenderPath = @"C:\Blender\blender.exe",
             LastBlendDirectory = @"Q:\shots",
             LastBlenderDirectory = @"C:\Blender",
         });
@@ -114,17 +110,17 @@ public sealed class RenderManagerArchitectureTests
             Items =
             [
                 new RenderQueueItem { Id = "job-1", Name = "One" },
-                new RenderQueueItem { Id = "job-2", Name = "Two", DeviceMode = RenderDeviceMode.ForceCpu },
+                new RenderQueueItem { Id = "job-2", Name = "Two", OutputFileNameTemplate = "two_[FRAME]" },
             ],
         });
 
         var loadedSettings = settingsStore.Load();
         var loadedQueue = queueStore.Load();
 
-        Assert.Equal(@"C:\Blender\blender.exe", loadedSettings.DefaultBlenderPath);
+        Assert.Equal(@"Q:\shots", loadedSettings.LastBlendDirectory);
         Assert.Equal("job-2", loadedQueue.SelectedJobId);
         Assert.Equal(2, loadedQueue.Items.Count);
-        Assert.Equal(RenderDeviceMode.ForceCpu, loadedQueue.Items[1].DeviceMode);
+        Assert.Equal("two_[FRAME]", loadedQueue.Items[1].OutputFileNameTemplate);
     }
 
     private sealed class MemorySettingsStore : IJsonSettingsStore

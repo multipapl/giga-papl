@@ -1,4 +1,5 @@
 using BlenderToolbox.Core.Abstractions;
+using BlenderToolbox.Core.Services;
 using BlenderToolbox.Tools.RenderManager.Services;
 using BlenderToolbox.Tools.RenderManager.ViewModels;
 using BlenderToolbox.Tools.RenderManager.Views;
@@ -9,7 +10,10 @@ public sealed class RenderManagerTool : IToolDefinition, IStatefulTool
 {
     private readonly RenderManagerViewModel _viewModel;
 
-    public RenderManagerTool(IJsonSettingsStore settingsStore, IFilePickerService filePickerService)
+    public RenderManagerTool(
+        IJsonSettingsStore settingsStore,
+        GlobalSettingsService globalSettingsService,
+        IFilePickerService filePickerService)
     {
         var paths = new RenderManagerPaths();
         var overrideScriptBuilder = new RenderOverrideScriptBuilder();
@@ -23,6 +27,7 @@ public sealed class RenderManagerTool : IToolDefinition, IStatefulTool
             new RenderJobValidationService(),
             new RenderJobLogWriter(),
             paths,
+            globalSettingsService,
             filePickerService);
 
         View = new RenderManagerView
