@@ -11,6 +11,18 @@
         <Setter Property="Foreground" Value="{DynamicResource TextForegroundBrush}" />
     </Style>
 
+    <Style TargetType="Expander">
+        <Setter Property="Foreground" Value="{DynamicResource TextForegroundBrush}" />
+    </Style>
+
+    <Style TargetType="ToolTip">
+        <Setter Property="Background" Value="{DynamicResource InputBackgroundBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource TextForegroundBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource InputBorderBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Padding" Value="8,5" />
+    </Style>
+
     <Style x:Key="SidebarTitleTextStyle" TargetType="TextBlock">
         <Setter Property="FontSize" Value="24" />
         <Setter Property="FontWeight" Value="SemiBold" />
@@ -142,6 +154,18 @@
                                 </Border>
                             </Grid>
                         </Border>
+                        <ToggleButton x:Name="DropDownToggle"
+                                      Background="Transparent"
+                                      BorderThickness="0"
+                                      ClickMode="Press"
+                                      Focusable="False"
+                                      IsChecked="{Binding IsDropDownOpen, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}">
+                            <ToggleButton.Template>
+                                <ControlTemplate TargetType="ToggleButton">
+                                    <Border Background="Transparent" />
+                                </ControlTemplate>
+                            </ToggleButton.Template>
+                        </ToggleButton>
                         <Popup x:Name="PART_Popup"
                                AllowsTransparency="True"
                                Focusable="False"
@@ -208,7 +232,8 @@
         <Setter Property="Background" Value="{DynamicResource PanelBorderBrush}" />
         <Setter Property="BorderBrush" Value="{DynamicResource PanelBorderBrush}" />
         <Setter Property="BorderThickness" Value="0" />
-        <Setter Property="Padding" Value="14,10" />
+        <Setter Property="Padding" Value="18,12" />
+        <Setter Property="MinHeight" Value="40" />
         <Setter Property="Cursor" Value="Hand" />
         <Setter Property="Template">
             <Setter.Value>
@@ -217,7 +242,8 @@
                             Background="{TemplateBinding Background}"
                             CornerRadius="{DynamicResource CornerRadiusControl}"
                             SnapsToDevicePixels="True">
-                        <ContentPresenter HorizontalAlignment="Center"
+                        <ContentPresenter Margin="{TemplateBinding Padding}"
+                                          HorizontalAlignment="Center"
                                           VerticalAlignment="Center" />
                     </Border>
                     <ControlTemplate.Triggers>

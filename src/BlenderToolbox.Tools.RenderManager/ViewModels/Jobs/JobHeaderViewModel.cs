@@ -5,9 +5,7 @@ namespace BlenderToolbox.Tools.RenderManager.ViewModels.Jobs;
 
 public partial class JobHeaderViewModel : ObservableObject
 {
-    public string EffectiveName => string.IsNullOrWhiteSpace(Name)
-        ? BlendFileName
-        : Name.Trim();
+    public string EffectiveName => BlendFileName;
 
     public string BlendDirectory => string.IsNullOrWhiteSpace(BlendFilePath)
         ? string.Empty

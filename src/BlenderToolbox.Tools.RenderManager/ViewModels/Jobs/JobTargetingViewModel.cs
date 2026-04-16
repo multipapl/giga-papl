@@ -5,6 +5,8 @@ namespace BlenderToolbox.Tools.RenderManager.ViewModels.Jobs;
 
 public partial class JobTargetingViewModel : ObservableObject
 {
+    public const string BlenderDefaultSelection = "Blender Default";
+
     private CancellationTokenSource? _inspectionCts;
     private SelectionSnapshot _selectionBeforeInspection = SelectionSnapshot.Empty;
 
@@ -47,6 +49,7 @@ public partial class JobTargetingViewModel : ObservableObject
             SceneName = value ? ResolvedSceneName : string.Empty;
             OnPropertyChanged(nameof(HasSceneOverride));
             OnPropertyChanged(nameof(IsSceneSelectorEnabled));
+            OnPropertyChanged(nameof(SceneSelection));
         }
     }
 
@@ -64,6 +67,7 @@ public partial class JobTargetingViewModel : ObservableObject
             CameraName = value ? ResolvedCameraName : string.Empty;
             OnPropertyChanged(nameof(HasCameraOverride));
             OnPropertyChanged(nameof(IsCameraSelectorEnabled));
+            OnPropertyChanged(nameof(CameraSelection));
         }
     }
 
@@ -81,6 +85,7 @@ public partial class JobTargetingViewModel : ObservableObject
             ViewLayerName = value ? ResolvedViewLayerName : string.Empty;
             OnPropertyChanged(nameof(HasViewLayerOverride));
             OnPropertyChanged(nameof(IsViewLayerSelectorEnabled));
+            OnPropertyChanged(nameof(ViewLayerSelection));
         }
     }
 
@@ -119,6 +124,8 @@ public partial class JobTargetingViewModel : ObservableObject
 
     public IReadOnlyList<string> AvailableSceneNames => Inspection?.AvailableScenes ?? [];
 
+    public IReadOnlyList<string> AvailableSceneOptions => BuildDefaultOptions(AvailableSceneNames);
+
     public IReadOnlyList<string> AvailableViewLayerNames
     {
         get
@@ -136,6 +143,52 @@ public partial class JobTargetingViewModel : ObservableObject
 
             return Inspection?.AvailableViewLayers ?? [];
         }
+    }
+
+    public IReadOnlyList<string> AvailableCameraOptions => BuildDefaultOptions(AvailableCameraNames);
+
+    public IReadOnlyList<string> AvailableViewLayerOptions => BuildDefaultOptions(AvailableViewLayerNames);
+
+    public string SceneSelection
+    {
+        get => HasSceneOverride && !string.IsNullOrWhiteSpace(SceneName)
+            ? SceneName.Trim()
+            : BlenderDefaultSelection;
+        set => ApplyComboSelection(
+            value,
+            selectedValue =>
+            {
+                SceneOverrideEnabled = !string.IsNullOrWhiteSpace(selectedValue);
+                SceneName = selectedValue;
+            });
+    }
+
+    public string CameraSelection
+    {
+        get => HasCameraOverride && !string.IsNullOrWhiteSpace(CameraName)
+            ? CameraName.Trim()
+            : BlenderDefaultSelection;
+        set => ApplyComboSelection(
+            value,
+            selectedValue =>
+            {
+                CameraOverrideEnabled = !string.IsNullOrWhiteSpace(selectedValue);
+                CameraName = selectedValue;
+            });
+    }
+
+    public string ViewLayerSelection
+    {
+        get => HasViewLayerOverride && !string.IsNullOrWhiteSpace(ViewLayerName)
+            ? ViewLayerName.Trim()
+            : BlenderDefaultSelection;
+        set => ApplyComboSelection(
+            value,
+            selectedValue =>
+            {
+                ViewLayerOverrideEnabled = !string.IsNullOrWhiteSpace(selectedValue);
+                ViewLayerName = selectedValue;
+            });
     }
 
     public string SceneHint => BuildTargetHint(SceneName, AvailableSceneNames, Inspection?.SceneName, "scene");
@@ -214,6 +267,7 @@ public partial class JobTargetingViewModel : ObservableObject
     {
         OnPropertyChanged(nameof(HasCameraOverride));
         OnPropertyChanged(nameof(ResolvedCameraName));
+        OnPropertyChanged(nameof(CameraSelection));
         OnPropertyChanged(nameof(CameraHint));
         OnPropertyChanged(nameof(CameraSelectionPreservationHint));
     }
@@ -222,6 +276,7 @@ public partial class JobTargetingViewModel : ObservableObject
     {
         OnPropertyChanged(nameof(HasCameraOverride));
         OnPropertyChanged(nameof(IsCameraSelectorEnabled));
+        OnPropertyChanged(nameof(CameraSelection));
     }
 
     partial void OnInspectionChanged(BlendInspectionSnapshot? value)
@@ -239,7 +294,12 @@ public partial class JobTargetingViewModel : ObservableObject
         OnPropertyChanged(nameof(HasSceneOverride));
         OnPropertyChanged(nameof(ResolvedSceneName));
         OnPropertyChanged(nameof(AvailableCameraNames));
+        OnPropertyChanged(nameof(AvailableCameraOptions));
         OnPropertyChanged(nameof(AvailableViewLayerNames));
+        OnPropertyChanged(nameof(AvailableViewLayerOptions));
+        OnPropertyChanged(nameof(SceneSelection));
+        OnPropertyChanged(nameof(CameraSelection));
+        OnPropertyChanged(nameof(ViewLayerSelection));
         OnPropertyChanged(nameof(SceneHint));
         OnPropertyChanged(nameof(CameraHint));
         OnPropertyChanged(nameof(ViewLayerHint));
@@ -250,12 +310,14 @@ public partial class JobTargetingViewModel : ObservableObject
     {
         OnPropertyChanged(nameof(HasSceneOverride));
         OnPropertyChanged(nameof(IsSceneSelectorEnabled));
+        OnPropertyChanged(nameof(SceneSelection));
     }
 
     partial void OnViewLayerNameChanged(string value)
     {
         OnPropertyChanged(nameof(HasViewLayerOverride));
         OnPropertyChanged(nameof(ResolvedViewLayerName));
+        OnPropertyChanged(nameof(ViewLayerSelection));
         OnPropertyChanged(nameof(ViewLayerHint));
         OnPropertyChanged(nameof(ViewLayerSelectionPreservationHint));
     }
@@ -264,6 +326,7 @@ public partial class JobTargetingViewModel : ObservableObject
     {
         OnPropertyChanged(nameof(HasViewLayerOverride));
         OnPropertyChanged(nameof(IsViewLayerSelectorEnabled));
+        OnPropertyChanged(nameof(ViewLayerSelection));
     }
 
     private void PreserveSelectionIfAvailable(SelectionSnapshot selection)
@@ -287,9 +350,13 @@ public partial class JobTargetingViewModel : ObservableObject
     private void NotifyInspectionChanged()
     {
         OnPropertyChanged(nameof(AvailableCameraNames));
+        OnPropertyChanged(nameof(AvailableCameraOptions));
         OnPropertyChanged(nameof(AvailableSceneNames));
+        OnPropertyChanged(nameof(AvailableSceneOptions));
         OnPropertyChanged(nameof(AvailableViewLayerNames));
+        OnPropertyChanged(nameof(AvailableViewLayerOptions));
         OnPropertyChanged(nameof(CameraHint));
+        OnPropertyChanged(nameof(CameraSelection));
         OnPropertyChanged(nameof(HasCameraOverride));
         OnPropertyChanged(nameof(HasInspection));
         OnPropertyChanged(nameof(HasSceneOverride));
@@ -303,7 +370,9 @@ public partial class JobTargetingViewModel : ObservableObject
         OnPropertyChanged(nameof(ResolvedSceneName));
         OnPropertyChanged(nameof(ResolvedViewLayerName));
         OnPropertyChanged(nameof(SceneHint));
+        OnPropertyChanged(nameof(SceneSelection));
         OnPropertyChanged(nameof(ViewLayerHint));
+        OnPropertyChanged(nameof(ViewLayerSelection));
         NotifySelectionPreservationChanged();
     }
 
@@ -343,8 +412,27 @@ public partial class JobTargetingViewModel : ObservableObject
         }
 
         return string.IsNullOrWhiteSpace(inspectedValue)
-            ? $"Empty = use {label} from blend."
-            : $"Empty = from blend: {inspectedValue.Trim()}";
+            ? $"{BlenderDefaultSelection} = use {label} from blend."
+            : $"{BlenderDefaultSelection} = from blend: {inspectedValue.Trim()}";
+    }
+
+    private static IReadOnlyList<string> BuildDefaultOptions(IReadOnlyList<string> availableValues)
+    {
+        if (availableValues.Count == 0)
+        {
+            return [BlenderDefaultSelection];
+        }
+
+        return [BlenderDefaultSelection, .. availableValues];
+    }
+
+    private static void ApplyComboSelection(string? value, Action<string> applySelection)
+    {
+        var selectedValue = string.Equals(value?.Trim(), BlenderDefaultSelection, StringComparison.OrdinalIgnoreCase)
+            ? string.Empty
+            : value?.Trim() ?? string.Empty;
+
+        applySelection(selectedValue);
     }
 
     private static string BuildSelectionPreservationHint(

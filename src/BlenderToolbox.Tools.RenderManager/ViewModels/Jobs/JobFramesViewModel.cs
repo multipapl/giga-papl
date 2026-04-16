@@ -5,9 +5,15 @@ namespace BlenderToolbox.Tools.RenderManager.ViewModels.Jobs;
 
 public partial class JobFramesViewModel : ObservableObject
 {
+    public bool HasStoredFrameOverride => Mode != RenderMode.FrameRange
+        || !string.IsNullOrWhiteSpace(StartFrame)
+        || !string.IsNullOrWhiteSpace(EndFrame)
+        || !string.IsNullOrWhiteSpace(SingleFrame)
+        || !string.IsNullOrWhiteSpace(Step);
+
     public bool HasFrameOverride
     {
-        get => FrameOverrideEnabled;
+        get => FrameOverrideEnabled || HasStoredFrameOverride;
         set
         {
             if (value == HasFrameOverride)
@@ -18,16 +24,15 @@ public partial class JobFramesViewModel : ObservableObject
             FrameOverrideEnabled = value;
             if (!value)
             {
-                Mode = RenderMode.Animation;
+                Mode = RenderMode.FrameRange;
                 StartFrame = string.Empty;
                 EndFrame = string.Empty;
                 SingleFrame = string.Empty;
-                Step = "1";
+                Step = string.Empty;
             }
             else
             {
                 Mode = RenderMode.FrameRange;
-                Step = string.IsNullOrWhiteSpace(Step) ? "1" : Step;
             }
 
             OnPropertyChanged(nameof(HasFrameOverride));
@@ -59,7 +64,7 @@ public partial class JobFramesViewModel : ObservableObject
     private bool frameOverrideEnabled;
 
     [ObservableProperty]
-    private RenderMode mode = RenderMode.Animation;
+    private RenderMode mode = RenderMode.FrameRange;
 
     [ObservableProperty]
     private string singleFrame = string.Empty;
@@ -68,18 +73,52 @@ public partial class JobFramesViewModel : ObservableObject
     private string startFrame = string.Empty;
 
     [ObservableProperty]
-    private string step = "1";
+    private string step = string.Empty;
 
     partial void OnFrameOverrideEnabledChanged(bool value)
     {
         OnPropertyChanged(nameof(HasFrameOverride));
     }
 
+    partial void OnEndFrameChanged(string value)
+    {
+        SyncFrameOverrideFlag();
+    }
+
     partial void OnModeChanged(RenderMode value)
     {
+        SyncFrameOverrideFlag();
         OnPropertyChanged(nameof(HasFrameOverride));
         OnPropertyChanged(nameof(IsAnimationMode));
         OnPropertyChanged(nameof(IsFrameRangeMode));
         OnPropertyChanged(nameof(IsSingleFrameMode));
+    }
+
+    partial void OnSingleFrameChanged(string value)
+    {
+        SyncFrameOverrideFlag();
+    }
+
+    partial void OnStartFrameChanged(string value)
+    {
+        SyncFrameOverrideFlag();
+    }
+
+    partial void OnStepChanged(string value)
+    {
+        SyncFrameOverrideFlag();
+    }
+
+    private void SyncFrameOverrideFlag()
+    {
+        var hasOverride = HasStoredFrameOverride;
+        if (FrameOverrideEnabled != hasOverride)
+        {
+            FrameOverrideEnabled = hasOverride;
+        }
+        else
+        {
+            OnPropertyChanged(nameof(HasFrameOverride));
+        }
     }
 }

@@ -9,6 +9,7 @@
         Height="820"
         MinWidth="920"
         MinHeight="700"
+        WindowState="Maximized"
         Background="{DynamicResource WindowBackgroundBrush}"
         Foreground="{DynamicResource TextForegroundBrush}">
     <Grid Margin="16"

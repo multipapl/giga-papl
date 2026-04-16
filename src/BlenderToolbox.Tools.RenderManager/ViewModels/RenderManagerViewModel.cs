@@ -9,6 +9,7 @@ using BlenderToolbox.Core.Presentation;
 using BlenderToolbox.Core.Services;
 using BlenderToolbox.Tools.RenderManager.Models;
 using BlenderToolbox.Tools.RenderManager.Services;
+using BlenderToolbox.Tools.RenderManager.ViewModels.Jobs;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using System.Windows.Threading;
@@ -25,7 +26,6 @@ public partial class RenderManagerViewModel : ObservableObject
         nameof(RenderQueueItemViewModel.ProgressText),
         nameof(RenderQueueItemViewModel.EtaText),
         nameof(RenderQueueItemViewModel.ElapsedText),
-        nameof(RenderQueueItemViewModel.Name),
         nameof(RenderQueueItemViewModel.BlendFilePath),
         nameof(RenderQueueItemViewModel.LastKnownOutputPath),
     ];
@@ -33,6 +33,7 @@ public partial class RenderManagerViewModel : ObservableObject
     private readonly BlendInspectionService _blendInspectionService;
     private readonly RenderCommandBuilder _commandBuilder;
     private readonly IFilePickerService _filePickerService;
+    private readonly IFolderPickerService _folderPickerService;
     private readonly RenderJobLogWriter _jobLogWriter;
     private readonly RenderManagerPaths _paths;
     private readonly RenderQueueStore _queueStore;
@@ -57,7 +58,8 @@ public partial class RenderManagerViewModel : ObservableObject
         RenderJobLogWriter jobLogWriter,
         RenderManagerPaths paths,
         GlobalSettingsService globalSettingsService,
-        IFilePickerService filePickerService)
+        IFilePickerService filePickerService,
+        IFolderPickerService folderPickerService)
     {
         _blendInspectionService = blendInspectionService;
         _commandBuilder = commandBuilder;
@@ -69,6 +71,7 @@ public partial class RenderManagerViewModel : ObservableObject
         _paths = paths;
         _globalSettingsService = globalSettingsService;
         _filePickerService = filePickerService;
+        _folderPickerService = folderPickerService;
         _uiContext = SynchronizationContext.Current ?? new SynchronizationContext();
         _globalSettingsService.Changed += OnGlobalSettingsChanged;
 
@@ -173,6 +176,30 @@ public partial class RenderManagerViewModel : ObservableObject
         ? "Blender is not configured. Open Settings."
         : $"Blender: {GlobalBlenderPath.Trim()}";
 
+    public string SelectedJobBlenderExecutableInput
+    {
+        get
+        {
+            var jobPath = SelectedJob?.BlenderExecutablePath?.Trim();
+            return string.IsNullOrWhiteSpace(jobPath)
+                ? GlobalBlenderPath.Trim()
+                : jobPath;
+        }
+        set
+        {
+            if (SelectedJob is null)
+            {
+                return;
+            }
+
+            var trimmedValue = value?.Trim() ?? string.Empty;
+            SelectedJob.BlenderExecutablePath = string.Equals(trimmedValue, GlobalBlenderPath.Trim(), StringComparison.OrdinalIgnoreCase)
+                ? string.Empty
+                : trimmedValue;
+            OnPropertyChanged();
+        }
+    }
+
     [ObservableProperty]
     private string globalBlenderPath = string.Empty;
 
@@ -198,6 +225,13 @@ public partial class RenderManagerViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(SelectedJobTitle))]
     [NotifyCanExecuteChangedFor(nameof(BrowseSelectedBlendCommand))]
     [NotifyCanExecuteChangedFor(nameof(BrowseSelectedBlenderCommand))]
+    [NotifyCanExecuteChangedFor(nameof(ClearSelectedCameraCommand))]
+    [NotifyCanExecuteChangedFor(nameof(ClearSelectedFrameOverridesCommand))]
+    [NotifyCanExecuteChangedFor(nameof(ClearSelectedOutputNameCommand))]
+    [NotifyCanExecuteChangedFor(nameof(BrowseSelectedOutputPathCommand))]
+    [NotifyCanExecuteChangedFor(nameof(ClearSelectedOutputPathCommand))]
+    [NotifyCanExecuteChangedFor(nameof(ClearSelectedSceneCommand))]
+    [NotifyCanExecuteChangedFor(nameof(ClearSelectedViewLayerCommand))]
     [NotifyCanExecuteChangedFor(nameof(DuplicateSelectedJobCommand))]
     [NotifyCanExecuteChangedFor(nameof(InspectSelectedJobCommand))]
     [NotifyCanExecuteChangedFor(nameof(OpenSelectedOutputFileCommand))]
@@ -246,6 +280,7 @@ public partial class RenderManagerViewModel : ObservableObject
         InspectSelectedJobCommand.NotifyCanExecuteChanged();
         UseDefaultBlenderForSelectedJobCommand.NotifyCanExecuteChanged();
         OnPropertyChanged(nameof(BlenderHeaderHelper));
+        OnPropertyChanged(nameof(SelectedJobBlenderExecutableInput));
     }
 
     partial void OnSelectedJobChanging(RenderQueueItemViewModel? value)
@@ -304,15 +339,6 @@ public partial class RenderManagerViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private void AddEmptyJob()
-    {
-        var job = RenderQueueItemViewModel.CreateNew(string.Empty);
-        Jobs.Add(job);
-        SelectedJob = job;
-        SetStatus("Added an empty queue item. Fill in the blend and render fields in the details panel.", StatusTone.Success);
-    }
-
-    [RelayCommand]
     private async Task BrowseDefaultBlender()
     {
         var selectedPath = _filePickerService.PickFile(
@@ -360,10 +386,6 @@ public partial class RenderManagerViewModel : ObservableObject
         }
 
         SelectedJob.BlendFilePath = selectedPath;
-        if (string.IsNullOrWhiteSpace(SelectedJob.Name) || SelectedJob.Name == "New render job")
-        {
-            SelectedJob.Name = Path.GetFileNameWithoutExtension(selectedPath);
-        }
 
         LastBlendDirectory = Path.GetDirectoryName(selectedPath) ?? string.Empty;
         SetStatus($"Updated source blend for {SelectedJob.EffectiveName}.", StatusTone.Success);
@@ -391,6 +413,99 @@ public partial class RenderManagerViewModel : ObservableObject
         SelectedJob.BlenderExecutablePath = selectedPath;
         LastBlenderDirectory = Path.GetDirectoryName(selectedPath) ?? string.Empty;
         SetStatus($"Updated Blender override for {SelectedJob.EffectiveName}.", StatusTone.Success);
+    }
+
+    [RelayCommand(CanExecute = nameof(CanEditSelectedJob))]
+    private void BrowseSelectedOutputPath()
+    {
+        if (SelectedJob is null)
+        {
+            return;
+        }
+
+        var selectedPath = _folderPickerService.PickFolder(
+            ResolveJobOutputDirectory(SelectedJob),
+            "Choose output folder");
+
+        if (string.IsNullOrWhiteSpace(selectedPath))
+        {
+            return;
+        }
+
+        SelectedJob.Output.OutputPathTemplate = selectedPath;
+        SetStatus($"Updated output path for {SelectedJob.EffectiveName}.", StatusTone.Success);
+    }
+
+    [RelayCommand(CanExecute = nameof(CanEditSelectedJob))]
+    private void ClearSelectedOutputPath()
+    {
+        if (SelectedJob is null)
+        {
+            return;
+        }
+
+        SelectedJob.Output.OutputPathTemplate = string.Empty;
+        SetStatus($"Restored Blender output path for {SelectedJob.EffectiveName}.", StatusTone.Success);
+    }
+
+    [RelayCommand(CanExecute = nameof(CanEditSelectedJob))]
+    private void ClearSelectedOutputName()
+    {
+        if (SelectedJob is null)
+        {
+            return;
+        }
+
+        SelectedJob.Output.OutputFileNameTemplate = string.Empty;
+        SetStatus($"Restored Blender render name for {SelectedJob.EffectiveName}.", StatusTone.Success);
+    }
+
+    [RelayCommand(CanExecute = nameof(CanEditSelectedJob))]
+    private void ClearSelectedFrameOverrides()
+    {
+        if (SelectedJob is null)
+        {
+            return;
+        }
+
+        SelectedJob.HasFrameOverride = false;
+        SetStatus($"Restored blend frame range for {SelectedJob.EffectiveName}.", StatusTone.Success);
+    }
+
+    [RelayCommand(CanExecute = nameof(CanEditSelectedJob))]
+    private void ClearSelectedScene()
+    {
+        if (SelectedJob is null)
+        {
+            return;
+        }
+
+        SelectedJob.Targeting.SceneSelection = JobTargetingViewModel.BlenderDefaultSelection;
+        SetStatus($"Restored blend scene for {SelectedJob.EffectiveName}.", StatusTone.Success);
+    }
+
+    [RelayCommand(CanExecute = nameof(CanEditSelectedJob))]
+    private void ClearSelectedCamera()
+    {
+        if (SelectedJob is null)
+        {
+            return;
+        }
+
+        SelectedJob.Targeting.CameraSelection = JobTargetingViewModel.BlenderDefaultSelection;
+        SetStatus($"Restored blend camera for {SelectedJob.EffectiveName}.", StatusTone.Success);
+    }
+
+    [RelayCommand(CanExecute = nameof(CanEditSelectedJob))]
+    private void ClearSelectedViewLayer()
+    {
+        if (SelectedJob is null)
+        {
+            return;
+        }
+
+        SelectedJob.Targeting.ViewLayerSelection = JobTargetingViewModel.BlenderDefaultSelection;
+        SetStatus($"Restored blend view layer for {SelectedJob.EffectiveName}.", StatusTone.Success);
     }
 
     [RelayCommand(CanExecute = nameof(CanEditSelectedJob))]
@@ -1392,6 +1507,11 @@ public partial class RenderManagerViewModel : ObservableObject
         {
             RefreshComputedState();
         }
+
+        if (e.PropertyName is nameof(RenderQueueItemViewModel.BlenderExecutablePath))
+        {
+            OnPropertyChanged(nameof(SelectedJobBlenderExecutableInput));
+        }
     }
 
     private void RefreshComputedState()
@@ -1403,9 +1523,17 @@ public partial class RenderManagerViewModel : ObservableObject
         OnPropertyChanged(nameof(QueueSummary));
         OnPropertyChanged(nameof(SelectedJobLogOutput));
         OnPropertyChanged(nameof(SelectedJobTitle));
+        OnPropertyChanged(nameof(SelectedJobBlenderExecutableInput));
 
         BrowseSelectedBlendCommand.NotifyCanExecuteChanged();
         BrowseSelectedBlenderCommand.NotifyCanExecuteChanged();
+        ClearSelectedCameraCommand.NotifyCanExecuteChanged();
+        ClearSelectedFrameOverridesCommand.NotifyCanExecuteChanged();
+        ClearSelectedOutputNameCommand.NotifyCanExecuteChanged();
+        BrowseSelectedOutputPathCommand.NotifyCanExecuteChanged();
+        ClearSelectedOutputPathCommand.NotifyCanExecuteChanged();
+        ClearSelectedSceneCommand.NotifyCanExecuteChanged();
+        ClearSelectedViewLayerCommand.NotifyCanExecuteChanged();
         DuplicateSelectedJobCommand.NotifyCanExecuteChanged();
         InspectSelectedJobCommand.NotifyCanExecuteChanged();
         OpenSelectedOutputFileCommand.NotifyCanExecuteChanged();
@@ -1447,6 +1575,24 @@ public partial class RenderManagerViewModel : ObservableObject
         }
 
         return ResolveInitialBlendDirectory();
+    }
+
+    private string ResolveJobOutputDirectory(RenderQueueItemViewModel job)
+    {
+        var overridePath = job.Output.OutputPathTemplate?.Trim();
+        if (Directory.Exists(overridePath))
+        {
+            return overridePath;
+        }
+
+        var resolvedOutputDirectory = job.ResolvedOutputDirectory?.Trim();
+        if (Directory.Exists(resolvedOutputDirectory))
+        {
+            return resolvedOutputDirectory;
+        }
+
+        var blendDirectory = Path.GetDirectoryName(job.BlendFilePath);
+        return Directory.Exists(blendDirectory) ? blendDirectory : string.Empty;
     }
 
     private RenderQueueItemViewModel? ResolveQueueJobToStart(QueueRunScope scope, bool resumePausedJob)

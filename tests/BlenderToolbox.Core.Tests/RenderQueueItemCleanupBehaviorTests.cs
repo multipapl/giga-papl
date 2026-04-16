@@ -10,7 +10,7 @@ public sealed class RenderQueueItemCleanupBehaviorTests
     [InlineData(InspectionState.NotInspected, "Blend defaults are not inspected yet.", "Waiting for inspection...", false)]
     [InlineData(InspectionState.Inspecting, "Inspecting blend...", "Inspecting blend...", false)]
     [InlineData(InspectionState.Failed, "Inspection failed. Click Update.", "Inspection failed. Click Update.", false)]
-    [InlineData(InspectionState.Ready, "Inspected ", "Empty = from blend:", true)]
+    [InlineData(InspectionState.Ready, "Inspected ", "Blender Default = from blend:", true)]
     public void InspectionStateControlsHintsAndSelectorAvailability(
         InspectionState state,
         string expectedSummary,
@@ -54,6 +54,57 @@ public sealed class RenderQueueItemCleanupBehaviorTests
         Assert.Equal(["Layer_B"], job.AvailableViewLayerNames);
         Assert.Contains("is not in scene", job.CameraHint);
         Assert.Contains("is not in scene", job.ViewLayerHint);
+    }
+
+    [Fact]
+    public void TargetingComboSelectionUsesBlenderDefaultAsNoOverride()
+    {
+        var job = CreateInspectedJob();
+
+        Assert.Equal(JobTargetingViewModel.BlenderDefaultSelection, job.Targeting.SceneSelection);
+        Assert.Equal(
+            [JobTargetingViewModel.BlenderDefaultSelection, "Scene_A", "Scene_B"],
+            job.Targeting.AvailableSceneOptions);
+
+        job.Targeting.SceneSelection = "Scene_B";
+
+        Assert.True(job.HasSceneOverride);
+        Assert.Equal("Scene_B", job.SceneName);
+        Assert.Equal("Scene_B", job.Targeting.SceneSelection);
+
+        job.Targeting.SceneSelection = JobTargetingViewModel.BlenderDefaultSelection;
+
+        Assert.False(job.HasSceneOverride);
+        Assert.Equal(string.Empty, job.SceneName);
+        Assert.Equal(JobTargetingViewModel.BlenderDefaultSelection, job.Targeting.SceneSelection);
+    }
+
+    [Fact]
+    public void OutputOverridesFollowEmptyValueAsBlenderDefault()
+    {
+        var job = RenderJobViewModel.CreateNew(@"Q:\shots\scene.blend");
+
+        Assert.False(job.Output.HasOutputPathOverride);
+        Assert.False(job.Output.HasOutputNameOverride);
+        Assert.Equal(JobOutputViewModel.BlenderDefaultLabel, job.OutputPathModeText);
+        Assert.Equal(JobOutputViewModel.BlenderDefaultLabel, job.OutputNameModeText);
+
+        job.Output.OutputPathTemplate = @"Q:\renders";
+        job.Output.OutputFileNameTemplate = "shot_[FRAME]";
+
+        Assert.True(job.Output.HasOutputPathOverride);
+        Assert.True(job.Output.HasOutputNameOverride);
+        Assert.Equal("Output path overridden", job.OutputPathModeText);
+        Assert.Equal("Render name overridden", job.OutputNameModeText);
+
+        job.Output.OutputPathTemplate = string.Empty;
+        job.Output.OutputFileNameTemplate = string.Empty;
+        var roundTripped = job.ToModel();
+
+        Assert.False(job.Output.HasOutputPathOverride);
+        Assert.False(job.Output.HasOutputNameOverride);
+        Assert.False(roundTripped.OutputPathOverrideEnabled);
+        Assert.False(roundTripped.OutputFileNameOverrideEnabled);
     }
 
     [Fact]
@@ -102,7 +153,6 @@ public sealed class RenderQueueItemCleanupBehaviorTests
     {
         var job = RenderQueueItemViewModel.CreateNew(@"Q:\shots\scene.blend");
 
-        job.Name = "Shot 010";
         job.BlenderExecutablePath = @"C:\Blender\blender.exe";
         job.Mode = RenderMode.SingleFrame;
         job.SingleFrame = "42";
@@ -110,7 +160,7 @@ public sealed class RenderQueueItemCleanupBehaviorTests
         job.SceneName = "Scene_A";
         job.Status = RenderJobStatus.Rendering;
 
-        Assert.Equal("Shot 010", job.Header.Name);
+        Assert.Equal("scene", job.EffectiveName);
         Assert.Equal(@"C:\Blender\blender.exe", job.Blender.BlenderExecutablePath);
         Assert.Equal(RenderMode.SingleFrame, job.Frames.Mode);
         Assert.Equal("42", job.Frames.SingleFrame);
@@ -171,13 +221,14 @@ public sealed class RenderQueueItemCleanupBehaviorTests
         var job = RenderJobViewModel.FromModel(model);
         var roundTripped = job.ToModel();
 
-        Assert.Equal("Shot 020", job.Header.Name);
+        Assert.Equal(string.Empty, job.Header.Name);
+        Assert.Equal("scene", job.EffectiveName);
         Assert.Equal(RenderMode.FrameRange, job.Frames.Mode);
         Assert.Equal("Scene_A", job.Targeting.SceneName);
         Assert.Equal(@"Q:\renders", job.Output.OutputPathTemplate);
         Assert.Equal(RenderJobStatus.Canceled, job.Runtime.Status);
         Assert.Equal(model.Id, roundTripped.Id);
-        Assert.Equal(model.Name, roundTripped.Name);
+        Assert.Equal(string.Empty, roundTripped.Name);
         Assert.Equal(model.Mode, roundTripped.Mode);
         Assert.Equal(model.OutputFileNameTemplate, roundTripped.OutputFileNameTemplate);
         Assert.Equal(model.Status, roundTripped.Status);

@@ -3,9 +3,9 @@ obj/
 .vs/
 TestResults/
 _ref/
-docs/
 .claude/
 .superpowers/
+artifacts/
 publish/
 *.user
 *.suo

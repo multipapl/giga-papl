@@ -1,5 +1,4 @@
 using System.ComponentModel;
-using System.IO;
 using BlenderToolbox.Tools.RenderManager.Models;
 using BlenderToolbox.Tools.RenderManager.Services;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -83,14 +82,94 @@ public partial class RenderJobViewModel : ObservableObject
     public string FrameSummary => Frames.Mode switch
     {
         RenderMode.Animation => $"Animation | {BlendFrameSummary}",
-        RenderMode.FrameRange => $"Frames {DisplayValue(Frames.StartFrame)} to {DisplayValue(Frames.EndFrame)} step {DisplayValue(Frames.Step, "1")}",
-        RenderMode.SingleFrame => $"Frame {DisplayValue(Frames.SingleFrame)}",
+        RenderMode.FrameRange => $"Frames {DisplayValue(ResolvedStartFrameText)} to {DisplayValue(ResolvedEndFrameText)} step {DisplayValue(ResolvedStepText, "1")}",
+        RenderMode.SingleFrame => $"Frame {DisplayValue(ResolvedSingleFrameText)}",
         _ => "Mode pending",
     };
+
+    public string FrameModeText => Frames.HasFrameOverride
+        ? "Frame settings overridden"
+        : "Using blend frame range";
+
+    public string FrameStartInput
+    {
+        get => ResolvedStartFrameText;
+        set
+        {
+            Frames.StartFrame = NormalizeFrameOverride(value, ResolveBlendStartFrameText());
+            NotifyFrameInputChanged(nameof(FrameStartInput));
+        }
+    }
+
+    public string FrameEndInput
+    {
+        get => ResolvedEndFrameText;
+        set
+        {
+            Frames.EndFrame = NormalizeFrameOverride(value, ResolveBlendEndFrameText());
+            NotifyFrameInputChanged(nameof(FrameEndInput));
+        }
+    }
+
+    public string FrameStepInput
+    {
+        get => ResolvedStepText;
+        set
+        {
+            Frames.Step = NormalizeFrameOverride(value, ResolveBlendStepText());
+            NotifyFrameInputChanged(nameof(FrameStepInput));
+        }
+    }
+
+    public string SingleFrameInput
+    {
+        get => ResolvedSingleFrameText;
+        set
+        {
+            Frames.SingleFrame = NormalizeFrameOverride(value, ResolveBlendSingleFrameText());
+            NotifyFrameInputChanged(nameof(SingleFrameInput));
+        }
+    }
 
     public string OutputDirectoryHint => OutputTemplateService.BuildOriginalOutputDirectoryHint(BuildTemplateContext());
 
     public string OutputNameHint => OutputTemplateService.BuildOriginalOutputNameHint(BuildTemplateContext());
+
+    public string OutputPathModeText => Output.HasOutputPathOverride
+        ? "Output path overridden"
+        : JobOutputViewModel.BlenderDefaultLabel;
+
+    public string OutputPathDisplayText
+    {
+        get
+        {
+            var value = Output.HasOutputPathOverride
+                ? Output.OutputPathTemplate
+                : ResolvedOutputDirectory;
+            return string.IsNullOrWhiteSpace(value)
+                ? JobOutputViewModel.BlenderDefaultLabel
+                : value.Trim();
+        }
+    }
+
+    public string OutputNameModeText => Output.HasOutputNameOverride
+        ? "Render name overridden"
+        : JobOutputViewModel.BlenderDefaultLabel;
+
+    public string OutputNameInput
+    {
+        get => ResolvedOutputName;
+        set
+        {
+            Output.OutputFileNameTemplate = NormalizeFrameOverride(value, OriginalOutputName);
+            OnPropertyChanged(nameof(OutputNameInput));
+            OnPropertyChanged(nameof(OutputNameModeText));
+            OnPropertyChanged(nameof(ResolvedOutputName));
+            OnPropertyChanged(nameof(ResolvedOutputPattern));
+        }
+    }
+
+    public string OriginalOutputName => OutputTemplateService.ResolveOriginalOutputName(BuildTemplateContext());
 
     public string ResolvedOutputDirectory => OutputTemplateService.ResolveOutputDirectory(BuildTemplateContext());
 
@@ -101,31 +180,27 @@ public partial class RenderJobViewModel : ObservableObject
     public bool UsesOutputFallback => OutputTemplateService.UsesFallback(BuildTemplateContext());
 
     public string ResolvedStartFrameText => string.IsNullOrWhiteSpace(Frames.StartFrame)
-        ? (Targeting.Inspection is { FrameStart: > 0 } inspection ? inspection.FrameStart.ToString() : string.Empty)
+        ? ResolveBlendStartFrameText()
         : Frames.StartFrame.Trim();
 
     public string ResolvedEndFrameText => string.IsNullOrWhiteSpace(Frames.EndFrame)
-        ? (Targeting.Inspection is { FrameEnd: > 0 } inspection ? inspection.FrameEnd.ToString() : string.Empty)
+        ? ResolveBlendEndFrameText()
         : Frames.EndFrame.Trim();
 
     public string ResolvedSingleFrameText => string.IsNullOrWhiteSpace(Frames.SingleFrame)
-        ? (Targeting.Inspection is { FrameStart: > 0 } inspection ? inspection.FrameStart.ToString() : "1")
+        ? ResolveBlendSingleFrameText()
         : Frames.SingleFrame.Trim();
 
     public string ResolvedStepText => string.IsNullOrWhiteSpace(Frames.Step)
-        ? (Targeting.Inspection is { FrameStep: > 0 } inspection ? inspection.FrameStep.ToString() : "1")
+        ? ResolveBlendStepText()
         : Frames.Step.Trim();
 
     public static RenderJobViewModel CreateNew(string blendFilePath)
     {
-        var fileName = string.IsNullOrWhiteSpace(blendFilePath)
-            ? "New render job"
-            : Path.GetFileNameWithoutExtension(blendFilePath);
-
         var job = new RenderJobViewModel();
-        job.Header.Name = fileName;
         job.Header.BlendFilePath = blendFilePath;
         job.Blender.BlenderExecutablePath = string.Empty;
+        job.Frames.Mode = RenderMode.FrameRange;
         job.Output.OutputPathTemplate = string.Empty;
         job.Output.OutputFileNameTemplate = string.Empty;
         job.Runtime.ResetRuntimeState(blendFilePath, "Queue item created.");
@@ -140,16 +215,16 @@ public partial class RenderJobViewModel : ObservableObject
         };
 
         job.Header.IsEnabled = item.IsEnabled;
-        job.Header.Name = item.Name;
         job.Header.BlendFilePath = item.BlendFilePath;
         job.Blender.BlenderExecutablePath = item.BlenderExecutablePath;
 
-        job.Frames.Mode = item.Mode;
-        job.Frames.FrameOverrideEnabled = item.FrameOverrideEnabled || item.Mode != RenderMode.Animation;
-        job.Frames.StartFrame = item.StartFrame;
-        job.Frames.EndFrame = item.EndFrame;
-        job.Frames.Step = item.Step;
-        job.Frames.SingleFrame = item.SingleFrame;
+        var hasFrameOverride = HasStoredFrameOverride(item);
+        job.Frames.Mode = item.Mode == RenderMode.SingleFrame ? RenderMode.SingleFrame : RenderMode.FrameRange;
+        job.Frames.StartFrame = hasFrameOverride ? item.StartFrame : string.Empty;
+        job.Frames.EndFrame = hasFrameOverride ? item.EndFrame : string.Empty;
+        job.Frames.Step = hasFrameOverride ? item.Step : string.Empty;
+        job.Frames.SingleFrame = hasFrameOverride ? item.SingleFrame : string.Empty;
+        job.Frames.FrameOverrideEnabled = hasFrameOverride;
 
         job.Targeting.SceneName = item.SceneName;
         job.Targeting.SceneOverrideEnabled = item.SceneOverrideEnabled || !string.IsNullOrWhiteSpace(item.SceneName);
@@ -161,9 +236,9 @@ public partial class RenderJobViewModel : ObservableObject
         job.Targeting.InspectionState = item.Inspection is null ? InspectionState.NotInspected : InspectionState.Ready;
 
         job.Output.OutputPathTemplate = NormalizeLegacyOutputPathOverride(item.OutputPathTemplate);
-        job.Output.OutputPathOverrideEnabled = item.OutputPathOverrideEnabled || !string.IsNullOrWhiteSpace(job.Output.OutputPathTemplate);
+        job.Output.OutputPathOverrideEnabled = job.Output.HasOutputPathOverride;
         job.Output.OutputFileNameTemplate = NormalizeLegacyOutputNameOverride(item.OutputFileNameTemplate);
-        job.Output.OutputFileNameOverrideEnabled = item.OutputFileNameOverrideEnabled || !string.IsNullOrWhiteSpace(job.Output.OutputFileNameTemplate);
+        job.Output.OutputFileNameOverrideEnabled = job.Output.HasOutputNameOverride;
 
         job.Runtime.CompletedFrameRenderSeconds = item.CompletedFrameRenderSeconds;
         job.Runtime.Status = item.Status;
@@ -193,12 +268,12 @@ public partial class RenderJobViewModel : ObservableObject
         {
             Id = Id,
             IsEnabled = Header.IsEnabled,
-            Name = Header.Name.Trim(),
+            Name = string.Empty,
             BlendFilePath = Header.BlendFilePath.Trim(),
             BlenderExecutablePath = Blender.BlenderExecutablePath.Trim(),
             CameraOverrideEnabled = Targeting.CameraOverrideEnabled,
             Mode = Frames.Mode,
-            FrameOverrideEnabled = Frames.FrameOverrideEnabled,
+            FrameOverrideEnabled = Frames.HasFrameOverride,
             StartFrame = Frames.StartFrame.Trim(),
             EndFrame = Frames.EndFrame.Trim(),
             Step = Frames.Step.Trim(),
@@ -210,9 +285,9 @@ public partial class RenderJobViewModel : ObservableObject
             ViewLayerOverrideEnabled = Targeting.ViewLayerOverrideEnabled,
             CompletedFrameRenderSeconds = Runtime.CompletedFrameRenderSeconds,
             OutputPathTemplate = Output.OutputPathTemplate.Trim(),
-            OutputPathOverrideEnabled = Output.OutputPathOverrideEnabled,
+            OutputPathOverrideEnabled = Output.HasOutputPathOverride,
             OutputFileNameTemplate = Output.OutputFileNameTemplate.Trim(),
-            OutputFileNameOverrideEnabled = Output.OutputFileNameOverrideEnabled,
+            OutputFileNameOverrideEnabled = Output.HasOutputNameOverride,
             Status = Runtime.Status,
             ProgressValue = Runtime.ProgressValue,
             ProgressText = Runtime.ProgressText.Trim(),
@@ -235,7 +310,6 @@ public partial class RenderJobViewModel : ObservableObject
     {
         var duplicate = ToModel();
         duplicate.Id = Guid.NewGuid().ToString("N");
-        duplicate.Name = $"{EffectiveName} Copy";
         var duplicateViewModel = FromModel(duplicate);
         duplicateViewModel.Runtime.ResetRuntimeState(duplicateViewModel.Header.BlendFilePath, $"Queue item duplicated from {EffectiveName}.");
         duplicateViewModel.Runtime.Status = RenderJobStatus.Pending;
@@ -275,17 +349,27 @@ public partial class RenderJobViewModel : ObservableObject
         OnPropertyChanged(nameof(BlendFileName));
         OnPropertyChanged(nameof(BlendFrameSummary));
         OnPropertyChanged(nameof(FrameSummary));
+        OnPropertyChanged(nameof(FrameModeText));
         OnPropertyChanged(nameof(HasInspection));
         OnPropertyChanged(nameof(InspectionSummary));
         OnPropertyChanged(nameof(OutputDirectoryHint));
         OnPropertyChanged(nameof(OutputNameHint));
+        OnPropertyChanged(nameof(OutputPathModeText));
+        OnPropertyChanged(nameof(OutputPathDisplayText));
+        OnPropertyChanged(nameof(OutputNameModeText));
+        OnPropertyChanged(nameof(OutputNameInput));
+        OnPropertyChanged(nameof(OriginalOutputName));
         OnPropertyChanged(nameof(ResolvedEndFrameText));
+        OnPropertyChanged(nameof(FrameEndInput));
         OnPropertyChanged(nameof(ResolvedOutputDirectory));
         OnPropertyChanged(nameof(ResolvedOutputName));
         OnPropertyChanged(nameof(ResolvedOutputPattern));
         OnPropertyChanged(nameof(ResolvedSingleFrameText));
+        OnPropertyChanged(nameof(SingleFrameInput));
         OnPropertyChanged(nameof(ResolvedStartFrameText));
+        OnPropertyChanged(nameof(FrameStartInput));
         OnPropertyChanged(nameof(ResolvedStepText));
+        OnPropertyChanged(nameof(FrameStepInput));
         OnPropertyChanged(nameof(UsesOutputFallback));
     }
 
@@ -306,6 +390,59 @@ public partial class RenderJobViewModel : ObservableObject
     private static string DisplayValue(string? value, string fallback = "Auto")
     {
         return string.IsNullOrWhiteSpace(value) ? fallback : value.Trim();
+    }
+
+    private string ResolveBlendStartFrameText()
+    {
+        return Targeting.Inspection is { FrameStart: > 0 } inspection ? inspection.FrameStart.ToString() : string.Empty;
+    }
+
+    private string ResolveBlendEndFrameText()
+    {
+        return Targeting.Inspection is { FrameEnd: > 0 } inspection ? inspection.FrameEnd.ToString() : string.Empty;
+    }
+
+    private string ResolveBlendSingleFrameText()
+    {
+        return Targeting.Inspection is { FrameStart: > 0 } inspection ? inspection.FrameStart.ToString() : "1";
+    }
+
+    private string ResolveBlendStepText()
+    {
+        return Targeting.Inspection is { FrameStep: > 0 } inspection ? inspection.FrameStep.ToString() : "1";
+    }
+
+    private static string NormalizeFrameOverride(string value, string blendDefault)
+    {
+        var trimmedValue = value?.Trim() ?? string.Empty;
+        var trimmedDefault = blendDefault?.Trim() ?? string.Empty;
+        return string.Equals(trimmedValue, trimmedDefault, StringComparison.Ordinal)
+            ? string.Empty
+            : trimmedValue;
+    }
+
+    private void NotifyFrameInputChanged(string propertyName)
+    {
+        OnPropertyChanged(propertyName);
+        OnPropertyChanged(nameof(FrameModeText));
+        OnPropertyChanged(nameof(FrameSummary));
+    }
+
+    private static string NormalizeStoredStep(string value)
+    {
+        return string.Equals(value?.Trim(), "1", StringComparison.Ordinal)
+            ? string.Empty
+            : value ?? string.Empty;
+    }
+
+    private static bool HasStoredFrameOverride(RenderQueueItem item)
+    {
+        return item.FrameOverrideEnabled
+            || item.Mode == RenderMode.SingleFrame
+            || !string.IsNullOrWhiteSpace(item.StartFrame)
+            || !string.IsNullOrWhiteSpace(item.EndFrame)
+            || !string.IsNullOrWhiteSpace(item.SingleFrame)
+            || !string.IsNullOrWhiteSpace(NormalizeStoredStep(item.Step));
     }
 
     private static string NormalizeLegacyOutputNameOverride(string value)

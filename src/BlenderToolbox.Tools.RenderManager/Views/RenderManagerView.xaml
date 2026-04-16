@@ -19,12 +19,72 @@
                BasedOn="{StaticResource {x:Type TextBox}}">
             <Setter Property="MinWidth" Value="0" />
         </Style>
+        <Style x:Key="QueueOverrideTextBoxStyle"
+               TargetType="TextBox"
+               BasedOn="{StaticResource QueueTextBoxStyle}">
+            <Setter Property="Foreground" Value="{DynamicResource PrimaryBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource PrimaryBrush}" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding RelativeSource={RelativeSource Self}, Path=Tag}" Value="">
+                    <Setter Property="Foreground" Value="{DynamicResource TextForegroundBrush}" />
+                    <Setter Property="BorderBrush" Value="{DynamicResource InputBorderBrush}" />
+                    <Setter Property="FontWeight" Value="Normal" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding RelativeSource={RelativeSource Self}, Path=Tag}" Value="False">
+                    <Setter Property="Foreground" Value="{DynamicResource TextForegroundBrush}" />
+                    <Setter Property="BorderBrush" Value="{DynamicResource InputBorderBrush}" />
+                    <Setter Property="FontWeight" Value="Normal" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding RelativeSource={RelativeSource Self}, Path=Tag}" Value="{x:Null}">
+                    <Setter Property="Foreground" Value="{DynamicResource TextForegroundBrush}" />
+                    <Setter Property="BorderBrush" Value="{DynamicResource InputBorderBrush}" />
+                    <Setter Property="FontWeight" Value="Normal" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+        <Style x:Key="QueueOverrideComboBoxStyle"
+               TargetType="ComboBox"
+               BasedOn="{StaticResource {x:Type ComboBox}}">
+            <Setter Property="Foreground" Value="{DynamicResource PrimaryBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource PrimaryBrush}" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding RelativeSource={RelativeSource Self}, Path=Tag}" Value="False">
+                    <Setter Property="Foreground" Value="{DynamicResource TextForegroundBrush}" />
+                    <Setter Property="BorderBrush" Value="{DynamicResource InputBorderBrush}" />
+                    <Setter Property="FontWeight" Value="Normal" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+        <Style x:Key="OverrideStatusTextStyle"
+               TargetType="TextBlock"
+               BasedOn="{StaticResource QueueHeaderTextStyle}">
+            <Setter Property="Foreground" Value="{DynamicResource PrimaryBrush}" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding RelativeSource={RelativeSource Self}, Path=Tag}" Value="False">
+                    <Setter Property="Foreground" Value="{DynamicResource MutedForegroundBrush}" />
+                    <Setter Property="FontWeight" Value="Normal" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
         <Style x:Key="LargeActionButtonStyle"
                TargetType="Button"
                BasedOn="{StaticResource PrimaryButtonStyle}">
-            <Setter Property="MinWidth" Value="112" />
-            <Setter Property="Padding" Value="18,12" />
+            <Setter Property="MinWidth" Value="124" />
+            <Setter Property="Padding" Value="22,14" />
             <Setter Property="FontWeight" Value="SemiBold" />
+        </Style>
+        <Style x:Key="ResetIconButtonStyle"
+               TargetType="Button"
+               BasedOn="{StaticResource SecondaryButtonStyle}">
+            <Setter Property="MinWidth" Value="38" />
+            <Setter Property="MinHeight" Value="38" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="FontSize" Value="18" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Content" Value="↺" />
         </Style>
     </UserControl.Resources>
 
@@ -101,562 +161,669 @@
         </Border>
 
         <Grid Grid.Row="2">
-            <Grid.RowDefinitions>
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="12" />
-                <RowDefinition Height="2*" />
-                <RowDefinition Height="12" />
-                <RowDefinition Height="Auto" />
-            </Grid.RowDefinitions>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="1*" MinWidth="360" />
+                <ColumnDefinition Width="12" />
+                <ColumnDefinition Width="2*" MinWidth="620" />
+            </Grid.ColumnDefinitions>
 
-            <Border Grid.Row="0"
+            <Border Grid.Column="0"
                     Style="{StaticResource PanelCardStyle}"
-                    Padding="14">
-                <DockPanel LastChildFill="False">
-                    <StackPanel DockPanel.Dock="Left"
-                                Orientation="Horizontal">
-                        <Button Margin="0,0,10,0"
-                                Style="{StaticResource LargeActionButtonStyle}"
-                                Command="{Binding StartQueueCommand}"
-                                Content="Start" />
-                        <Button Margin="0,0,10,0"
-                                MinWidth="112"
-                                Padding="18,12"
-                                Style="{StaticResource DangerButtonStyle}"
-                                Command="{Binding StopQueueCommand}"
-                                Content="Stop" />
-                        <Button MinWidth="112"
-                                Padding="18,12"
-                                Style="{StaticResource SecondaryButtonStyle}"
-                                Command="{Binding ResumeQueueCommand}"
-                                Content="Resume" />
-                    </StackPanel>
+                    DataContext="{Binding SelectedJob}"
+                    IsEnabled="{Binding DataContext.HasSelectedJob, RelativeSource={RelativeSource AncestorType=UserControl}}">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="12" />
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <DockPanel Grid.Row="0">
+                        <TextBlock DockPanel.Dock="Left"
+                                   Style="{StaticResource SectionTitleTextStyle}"
+                                   Text="Latest Frame" />
+                        <TextBlock DockPanel.Dock="Right"
+                                   Margin="12,2,0,0"
+                                   Style="{StaticResource HelperTextStyle}"
+                                   Text="{Binding Runtime.ProgressText}" />
+                    </DockPanel>
 
-                    <StackPanel DockPanel.Dock="Right"
-                                Orientation="Horizontal">
-                        <Button Margin="10,0,0,0"
-                                Style="{StaticResource SecondaryButtonStyle}"
-                                Command="{Binding AddBlendCommand}"
-                                Content="Add Blend" />
-                        <Button Margin="10,0,0,0"
-                                Style="{StaticResource DangerButtonStyle}"
-                                Command="{Binding RemoveSelectedJobCommand}"
-                                Content="Remove" />
-                        <Button Margin="10,0,0,0"
-                                Style="{StaticResource SecondaryButtonStyle}"
-                                Command="{Binding AddEmptyJobCommand}"
-                                Content="Add Empty" />
+                    <Border Grid.Row="2"
+                            Background="{DynamicResource InputBackgroundBrush}"
+                            BorderBrush="{DynamicResource InputBorderBrush}"
+                            BorderThickness="1"
+                            CornerRadius="8">
+                        <Grid>
+                            <Image Source="{Binding Runtime.PreviewImageSource}"
+                                   Stretch="Uniform">
+                                <Image.Style>
+                                    <Style TargetType="Image">
+                                        <Setter Property="Visibility" Value="Collapsed" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding Runtime.HasPreviewImage}" Value="True">
+                                                <Setter Property="Visibility" Value="Visible" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Image.Style>
+                            </Image>
+                            <TextBlock Margin="24"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"
+                                       Foreground="{DynamicResource MutedForegroundBrush}"
+                                       FontSize="12"
+                                       Text="{Binding Runtime.PreviewStatusText}"
+                                       TextAlignment="Center"
+                                       TextWrapping="Wrap">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding Runtime.HasPreviewImage}" Value="True">
+                                                <Setter Property="Visibility" Value="Collapsed" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                        </Grid>
+                    </Border>
+
+                    <StackPanel Grid.Row="3"
+                                Margin="0,12,0,0">
+                        <TextBlock Style="{StaticResource HelperTextStyle}"
+                                   Text="{Binding Runtime.PreviewPathText}" />
+                        <WrapPanel Margin="0,12,0,0">
+                            <Button Margin="0,0,8,8"
+                                    Style="{StaticResource SecondaryButtonStyle}"
+                                    Command="{Binding DataContext.OpenSelectedOutputFileCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                    Content="Open Frame"
+                                    ToolTip="Open the latest rendered frame for the selected job." />
+                            <Button Margin="0,0,8,8"
+                                    Style="{StaticResource SecondaryButtonStyle}"
+                                    Command="{Binding DataContext.OpenSelectedOutputFolderCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                    Content="Open Folder"
+                                    ToolTip="Open the selected job's output folder." />
+                        </WrapPanel>
                     </StackPanel>
-                </DockPanel>
+                </Grid>
             </Border>
 
-            <Border Grid.Row="2"
-                    Style="{StaticResource PanelCardStyle}"
-                    Padding="0">
-                <DataGrid AutoGenerateColumns="False"
-                          CanUserAddRows="False"
-                          CanUserDeleteRows="False"
-                          CanUserResizeColumns="True"
-                          CanUserReorderColumns="False"
-                          CanUserSortColumns="False"
-                          SelectionMode="Extended"
-                          SelectionUnit="FullRow"
-                          HeadersVisibility="Column"
-                          GridLinesVisibility="Horizontal"
-                          IsReadOnly="True"
-                          AllowDrop="True"
-                          PreviewMouseLeftButtonDown="QueueGrid_PreviewMouseLeftButtonDown"
-                          PreviewMouseMove="QueueGrid_PreviewMouseMove"
-                          Drop="QueueGrid_Drop"
-                          ItemsSource="{Binding Jobs}"
-                          SelectedItem="{Binding SelectedJob, Mode=TwoWay}">
-                    <DataGrid.Columns>
-                        <DataGridTemplateColumn Header="Enabled"
-                                                Width="70">
-                            <DataGridTemplateColumn.CellTemplate>
-                                <DataTemplate>
-                                    <CheckBox IsChecked="{Binding Header.IsEnabled, UpdateSourceTrigger=PropertyChanged, Mode=TwoWay}"
-                                              HorizontalAlignment="Center"
-                                              VerticalAlignment="Center" />
-                                </DataTemplate>
-                            </DataGridTemplateColumn.CellTemplate>
-                        </DataGridTemplateColumn>
-                        <DataGridTextColumn Header="Name"
-                                            Width="1*"
-                                            Binding="{Binding EffectiveName, Mode=OneWay}" />
-                        <DataGridTextColumn Header="Blend"
-                                            Width="0.9*"
-                                            Binding="{Binding BlendFileName, Mode=OneWay}" />
-                        <DataGridTextColumn Header="Path"
-                                            Width="1.4*"
-                                            Binding="{Binding BlendDirectory, Mode=OneWay}" />
-                        <DataGridTextColumn Header="Frames"
-                                            Width="1.1*"
-                                            Binding="{Binding FrameSummary, Mode=OneWay}" />
-                        <DataGridTemplateColumn Header="Output"
-                                                Width="1.3*">
-                            <DataGridTemplateColumn.CellTemplate>
-                                <DataTemplate>
-                                    <TextBlock TextWrapping="Wrap"
-                                               MaxHeight="42"
-                                               Text="{Binding ResolvedOutputDirectory, Mode=OneWay}" />
-                                </DataTemplate>
-                            </DataGridTemplateColumn.CellTemplate>
-                        </DataGridTemplateColumn>
-                        <DataGridTemplateColumn Header="Progress"
-                                                Width="1.1*">
-                            <DataGridTemplateColumn.CellTemplate>
-                                <DataTemplate>
-                                    <StackPanel VerticalAlignment="Center">
-                                        <ProgressBar Value="{Binding ProgressValue, Mode=OneWay}"
-                                                     Height="6" />
-                                        <DockPanel Margin="0,3,0,0">
-                                            <TextBlock DockPanel.Dock="Left"
-                                                       Text="{Binding Runtime.ProgressText}"
-                                                       FontSize="11"
-                                                       Foreground="{DynamicResource MutedForegroundBrush}" />
-                                            <TextBlock DockPanel.Dock="Right"
-                                                       HorizontalAlignment="Right"
-                                                       Text="{Binding ProgressPercentLabel}"
-                                                       FontWeight="SemiBold"
-                                                       FontSize="11" />
-                                        </DockPanel>
-                                    </StackPanel>
-                                </DataTemplate>
-                            </DataGridTemplateColumn.CellTemplate>
-                        </DataGridTemplateColumn>
-                        <DataGridTextColumn Header="Status"
-                                            Width="0.75*"
-                                            Binding="{Binding Runtime.Status, Mode=OneWay}" />
-                        <DataGridTextColumn Header="ETA"
-                                            Width="0.65*"
-                                            Binding="{Binding Runtime.EtaText, Mode=OneWay}" />
-                        <DataGridTemplateColumn Header=""
-                                                Width="80">
-                            <DataGridTemplateColumn.CellTemplate>
-                                <DataTemplate>
-                                    <Button Padding="8,4"
-                                            Style="{StaticResource SecondaryButtonStyle}"
-                                            Command="{Binding DataContext.OpenJobOutputFolderCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                            CommandParameter="{Binding}"
-                                            Content="Open" />
-                                </DataTemplate>
-                            </DataGridTemplateColumn.CellTemplate>
-                        </DataGridTemplateColumn>
-                    </DataGrid.Columns>
-                </DataGrid>
-            </Border>
+            <Grid Grid.Column="2">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="12" />
+                    <RowDefinition Height="1.05*" />
+                    <RowDefinition Height="12" />
+                    <RowDefinition Height="1.35*" />
+                </Grid.RowDefinitions>
 
-            <Border Grid.Row="4"
-                    Style="{StaticResource PanelCardStyle}">
-                <ScrollViewer MaxHeight="430"
-                              VerticalScrollBarVisibility="Auto"
-                              HorizontalScrollBarVisibility="Disabled">
-                    <StackPanel>
-                        <TextBlock Style="{StaticResource SectionTitleTextStyle}"
-                                   Text="{Binding SelectedJobTitle, StringFormat=Detail Panel - {0}}" />
+                <Border Grid.Row="0"
+                        Style="{StaticResource PanelCardStyle}"
+                        Padding="14">
+                    <DockPanel LastChildFill="False">
+                        <StackPanel DockPanel.Dock="Left"
+                                    Orientation="Horizontal">
+                            <Button Margin="0,0,10,0"
+                                    Style="{StaticResource LargeActionButtonStyle}"
+                                    Command="{Binding StartQueueCommand}"
+                                    Content="Start"
+                                    ToolTip="Start rendering enabled jobs from the queue." />
+                            <Button Margin="0,0,10,0"
+                                    MinWidth="124"
+                                    Padding="22,14"
+                                    Style="{StaticResource DangerButtonStyle}"
+                                    Command="{Binding StopQueueCommand}"
+                                    Content="Stop"
+                                    ToolTip="Stop the running render after the current frame." />
+                            <Button MinWidth="124"
+                                    Padding="22,14"
+                                    Style="{StaticResource SecondaryButtonStyle}"
+                                    Command="{Binding ResumeQueueCommand}"
+                                    Content="Resume"
+                                    ToolTip="Resume a paused or partially completed queue item." />
+                            <Button Margin="10,0,0,0"
+                                    MinWidth="124"
+                                    Padding="22,14"
+                                    Style="{StaticResource SecondaryButtonStyle}"
+                                    Command="{Binding ResetSelectedJobCommand}"
+                                    Content="Reset"
+                                    ToolTip="Reset progress and runtime state for the selected job." />
+                            <Button Margin="10,0,0,0"
+                                    MinWidth="124"
+                                    Padding="22,14"
+                                    Style="{StaticResource SecondaryButtonStyle}"
+                                    Command="{Binding InspectSelectedJobCommand}"
+                                    Content="Update"
+                                    ToolTip="Reload blend file metadata for the selected job." />
+                        </StackPanel>
 
-                        <WrapPanel Margin="0,16,0,0"
-                                   DataContext="{Binding SelectedJob}"
-                                   IsEnabled="{Binding DataContext.HasSelectedJob, RelativeSource={RelativeSource AncestorType=UserControl}}">
-                            <StackPanel Width="520"
-                                        MinWidth="360"
-                                        Margin="0,0,18,18">
-                                <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="Auto" />
-                                        <ColumnDefinition Width="Auto" />
-                                        <ColumnDefinition Width="Auto" />
-                                        <ColumnDefinition Width="Auto" />
-                                    </Grid.ColumnDefinitions>
-                                    <TextBox Grid.Column="0"
-                                             Margin="0,0,8,0"
-                                             Style="{StaticResource QueueTextBoxStyle}"
-                                             Text="{Binding Header.Name, UpdateSourceTrigger=PropertyChanged}" />
-                                    <CheckBox Grid.Column="1"
-                                              Margin="0,0,8,0"
-                                              VerticalAlignment="Center"
-                                              Content="Enabled"
-                                              IsChecked="{Binding Header.IsEnabled}" />
-                                    <Button Grid.Column="2"
-                                            Margin="0,0,8,0"
-                                            Style="{StaticResource SecondaryButtonStyle}"
-                                            Command="{Binding DataContext.BrowseSelectedBlendCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                            Content="Browse Blend" />
-                                    <Button Grid.Column="3"
-                                            Margin="0,0,8,0"
-                                            Style="{StaticResource SecondaryButtonStyle}"
-                                            Command="{Binding DataContext.ResetSelectedJobCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                            Content="Reset" />
-                                    <Button Grid.Column="4"
-                                            Style="{StaticResource SecondaryButtonStyle}"
-                                            Command="{Binding DataContext.RetrySelectedJobCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                            Content="Retry" />
-                                </Grid>
+                        <StackPanel DockPanel.Dock="Right"
+                                    Orientation="Horizontal">
+                            <Button Margin="10,0,0,0"
+                                    Style="{StaticResource SecondaryButtonStyle}"
+                                    Command="{Binding AddBlendCommand}"
+                                    Content="Add Blend"
+                                    ToolTip="Add one or more .blend files to the queue." />
+                            <Button Margin="10,0,0,0"
+                                    Style="{StaticResource DangerButtonStyle}"
+                                    Command="{Binding RemoveSelectedJobCommand}"
+                                    Content="Remove"
+                                    ToolTip="Remove the selected job from the queue." />
+                        </StackPanel>
+                    </DockPanel>
+                </Border>
 
-                                <Border Margin="0,14,0,0"
+                <Border Grid.Row="2"
+                        Style="{StaticResource PanelCardStyle}"
+                        Padding="0">
+                    <DataGrid AutoGenerateColumns="False"
+                              CanUserAddRows="False"
+                              CanUserDeleteRows="False"
+                              CanUserResizeColumns="True"
+                              CanUserReorderColumns="False"
+                              CanUserSortColumns="False"
+                              SelectionMode="Extended"
+                              SelectionUnit="FullRow"
+                              HeadersVisibility="Column"
+                              GridLinesVisibility="Horizontal"
+                              IsReadOnly="True"
+                              AllowDrop="True"
+                              PreviewMouseLeftButtonDown="QueueGrid_PreviewMouseLeftButtonDown"
+                              PreviewMouseMove="QueueGrid_PreviewMouseMove"
+                              Drop="QueueGrid_Drop"
+                              ItemsSource="{Binding Jobs}"
+                              SelectedItem="{Binding SelectedJob, Mode=TwoWay}">
+                        <DataGrid.Columns>
+                            <DataGridTemplateColumn Header="Enabled"
+                                                    Width="70">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <CheckBox IsChecked="{Binding Header.IsEnabled, UpdateSourceTrigger=PropertyChanged, Mode=TwoWay}"
+                                                  HorizontalAlignment="Center"
+                                                  VerticalAlignment="Center"
+                                                  ToolTip="Include this job when running the queue." />
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                            <DataGridTextColumn Header="Blend"
+                                                Width="1.2*"
+                                                Binding="{Binding BlendFileName, Mode=OneWay}" />
+                            <DataGridTextColumn Header="Blend File Path"
+                                                Width="1.5*"
+                                                Binding="{Binding BlendFilePath, Mode=OneWay}" />
+                            <DataGridTextColumn Header="Frames"
+                                                Width="1.1*"
+                                                Binding="{Binding FrameSummary, Mode=OneWay}" />
+                            <DataGridTemplateColumn Header="Output"
+                                                    Width="1.3*">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <TextBlock TextWrapping="Wrap"
+                                                   MaxHeight="42"
+                                                   Text="{Binding ResolvedOutputDirectory, Mode=OneWay}" />
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                            <DataGridTemplateColumn Header="Progress"
+                                                    Width="1.1*">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <StackPanel VerticalAlignment="Center">
+                                            <ProgressBar Value="{Binding ProgressValue, Mode=OneWay}"
+                                                         Height="6" />
+                                            <DockPanel Margin="0,3,0,0">
+                                                <TextBlock DockPanel.Dock="Left"
+                                                           Text="{Binding Runtime.ProgressText}"
+                                                           FontSize="11"
+                                                           Foreground="{DynamicResource MutedForegroundBrush}" />
+                                                <TextBlock DockPanel.Dock="Right"
+                                                           HorizontalAlignment="Right"
+                                                           Text="{Binding ProgressPercentLabel}"
+                                                           FontWeight="SemiBold"
+                                                           FontSize="11" />
+                                            </DockPanel>
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                            <DataGridTextColumn Header="Status"
+                                                Width="0.75*"
+                                                Binding="{Binding Runtime.Status, Mode=OneWay}" />
+                            <DataGridTextColumn Header="ETA"
+                                                Width="0.65*"
+                                                Binding="{Binding Runtime.EtaText, Mode=OneWay}" />
+                            <DataGridTemplateColumn Header=""
+                                                    Width="90">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <Button Padding="12,6"
+                                                Style="{StaticResource SecondaryButtonStyle}"
+                                                Command="{Binding DataContext.OpenJobOutputFolderCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                CommandParameter="{Binding}"
+                                                Content="Open"
+                                                ToolTip="Open this job's output folder." />
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </Border>
+
+                <Border Grid.Row="4"
+                        Style="{StaticResource PanelCardStyle}">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                  HorizontalScrollBarVisibility="Disabled"
+                                  PreviewMouseWheel="DetailsScrollViewer_PreviewMouseWheel">
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource SectionTitleTextStyle}"
+                                       Text="{Binding SelectedJobTitle, StringFormat=Detail Panel - {0}}" />
+
+                            <StackPanel Margin="0,12,0,0"
+                                        DataContext="{Binding SelectedJob}"
+                                        IsEnabled="{Binding DataContext.HasSelectedJob, RelativeSource={RelativeSource AncestorType=UserControl}}">
+                                <Border Margin="0,0,0,8"
+                                        Padding="12"
                                         Style="{StaticResource InsetPanelCardStyle}">
-                                    <Grid>
+                                    <Grid VerticalAlignment="Center">
                                         <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="220" />
                                             <ColumnDefinition Width="*" />
                                             <ColumnDefinition Width="Auto" />
                                         </Grid.ColumnDefinitions>
-                                        <StackPanel>
-                                            <TextBlock Style="{StaticResource QueueHeaderTextStyle}"
+                                        <StackPanel Grid.Column="0"
+                                                    VerticalAlignment="Center">
+                                            <TextBlock Style="{StaticResource SectionTitleTextStyle}"
                                                        Text="{Binding Header.BlendFileName}" />
-                                            <TextBlock Margin="0,6,0,0"
-                                                       Style="{StaticResource HelperTextStyle}"
-                                                       Text="{Binding Header.BlendFilePath}" />
-                                            <TextBlock Margin="0,8,0,0"
-                                                       Style="{StaticResource HelperTextStyle}"
-                                                       Text="{Binding Targeting.InspectionSummary}" />
                                         </StackPanel>
-                                        <Button Grid.Column="1"
-                                                VerticalAlignment="Top"
-                                                Style="{StaticResource SecondaryButtonStyle}"
-                                                Command="{Binding DataContext.InspectSelectedJobCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                                Content="Update" />
+                                        <StackPanel Grid.Column="1"
+                                                    Margin="18,0,12,0"
+                                                    HorizontalAlignment="Stretch"
+                                                    VerticalAlignment="Center">
+                                            <TextBlock Style="{StaticResource HelperTextStyle}"
+                                                       HorizontalAlignment="Stretch"
+                                                       TextAlignment="Center"
+                                                       Text="{Binding Header.BlendFilePath}"
+                                                       TextTrimming="CharacterEllipsis"
+                                                       ToolTip="{Binding Header.BlendFilePath}" />
+                                            <TextBlock Margin="0,5,0,0"
+                                                       Style="{StaticResource HelperTextStyle}"
+                                                       HorizontalAlignment="Stretch"
+                                                       TextAlignment="Center"
+                                                       Text="{Binding Targeting.InspectionSummary}"
+                                                       ToolTip="Last blend metadata inspection status." />
+                                        </StackPanel>
+                                        <WrapPanel Grid.Column="2"
+                                                   HorizontalAlignment="Right"
+                                                   VerticalAlignment="Center">
+                                            <CheckBox Margin="12,0,10,0"
+                                                      VerticalAlignment="Center"
+                                                      Content="Enabled"
+                                                      IsChecked="{Binding Header.IsEnabled}"
+                                                      ToolTip="Include this job when the queue runs." />
+                                            <Button Margin="0,0,6,0"
+                                                    Padding="12,6"
+                                                    Style="{StaticResource SecondaryButtonStyle}"
+                                                    Command="{Binding DataContext.BrowseSelectedBlendCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                    Content="Browse Blend"
+                                                    ToolTip="Choose a different .blend file for this job." />
+                                            <Button Padding="12,6"
+                                                    Style="{StaticResource SecondaryButtonStyle}"
+                                                    Command="{Binding DataContext.RetrySelectedJobCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                    Content="Retry"
+                                                    ToolTip="Clear failed runtime state and mark the job ready to run again." />
+                                        </WrapPanel>
                                     </Grid>
                                 </Border>
 
-                                <Border Margin="0,18,0,0"
+                                <Border Margin="0,0,0,8"
+                                        Padding="12"
                                         Style="{StaticResource InsetPanelCardStyle}">
-                                    <StackPanel>
-                                        <DockPanel>
-                                            <TextBlock DockPanel.Dock="Left"
-                                                       Style="{StaticResource SectionTitleTextStyle}"
-                                                       Text="Latest Frame" />
-                                            <TextBlock DockPanel.Dock="Right"
-                                                       Margin="12,2,0,0"
-                                                       Style="{StaticResource HelperTextStyle}"
-                                                       Text="{Binding Runtime.ProgressText}" />
-                                        </DockPanel>
-                                        <Border Margin="0,10,0,0"
-                                                MinHeight="190"
-                                                Background="{DynamicResource InputBackgroundBrush}"
-                                                BorderBrush="{DynamicResource InputBorderBrush}"
-                                                BorderThickness="1"
-                                                CornerRadius="8">
-                                            <Grid>
-                                                <Image Source="{Binding Runtime.PreviewImageSource}"
-                                                       Stretch="Uniform">
-                                                    <Image.Style>
-                                                        <Style TargetType="Image">
-                                                            <Setter Property="Visibility" Value="Collapsed" />
-                                                            <Style.Triggers>
-                                                                <DataTrigger Binding="{Binding Runtime.HasPreviewImage}" Value="True">
-                                                                    <Setter Property="Visibility" Value="Visible" />
-                                                                </DataTrigger>
-                                                            </Style.Triggers>
-                                                        </Style>
-                                                    </Image.Style>
-                                                </Image>
-                                                <TextBlock Margin="24"
-                                                           HorizontalAlignment="Center"
-                                                           VerticalAlignment="Center"
-                                                           Foreground="{DynamicResource MutedForegroundBrush}"
-                                                           FontSize="12"
-                                                           Text="{Binding Runtime.PreviewStatusText}"
-                                                           TextAlignment="Center"
-                                                           TextWrapping="Wrap">
-                                                    <TextBlock.Style>
-                                                        <Style TargetType="TextBlock">
-                                                            <Setter Property="Visibility" Value="Visible" />
-                                                            <Style.Triggers>
-                                                                <DataTrigger Binding="{Binding Runtime.HasPreviewImage}" Value="True">
-                                                                    <Setter Property="Visibility" Value="Collapsed" />
-                                                                </DataTrigger>
-                                                            </Style.Triggers>
-                                                        </Style>
-                                                    </TextBlock.Style>
-                                                </TextBlock>
+                                    <Expander IsExpanded="False"
+                                              ToolTip="Render settings: Blender executable, frames, and output.">
+                                        <Expander.Header>
+                                            <TextBlock Style="{StaticResource SectionTitleTextStyle}"
+                                                       Foreground="{DynamicResource TextForegroundBrush}"
+                                                       Text="Render" />
+                                        </Expander.Header>
+                                        <StackPanel Margin="0,10,0,0">
+                                            <TextBlock Style="{StaticResource FieldLabelTextStyle}"
+                                                       Text="Executable override" />
+                                            <Grid Margin="0,6,0,0">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="8" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                    <ColumnDefinition Width="8" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+                                                <TextBox Grid.Column="0"
+                                                         Style="{StaticResource QueueOverrideTextBoxStyle}"
+                                                         Tag="{Binding Blender.BlenderExecutablePath}"
+                                                         Text="{Binding DataContext.SelectedJobBlenderExecutableInput, RelativeSource={RelativeSource AncestorType=UserControl}, UpdateSourceTrigger=PropertyChanged}"
+                                                         ToolTip="{Binding DataContext.SelectedJobBlenderExecutableInput, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                                                <Button Grid.Column="2"
+                                                        Style="{StaticResource SecondaryButtonStyle}"
+                                                        Command="{Binding DataContext.BrowseSelectedBlenderCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                        Content="Browse"
+                                                        ToolTip="Choose a Blender executable override for this job." />
+                                                <Button Grid.Column="4"
+                                                        Style="{StaticResource ResetIconButtonStyle}"
+                                                        Command="{Binding DataContext.UseDefaultBlenderForSelectedJobCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                        ToolTip="Use the global Blender executable from Settings." />
                                             </Grid>
-                                        </Border>
-                                        <TextBlock Margin="0,10,0,0"
-                                                   Style="{StaticResource HelperTextStyle}"
-                                                   Text="{Binding Runtime.PreviewPathText}" />
-                                        <WrapPanel Margin="0,10,0,0">
-                                            <Button Margin="0,0,8,8"
-                                                    Style="{StaticResource SecondaryButtonStyle}"
-                                                    Command="{Binding DataContext.OpenSelectedOutputFileCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                                    Content="Open Frame" />
-                                            <Button Margin="0,0,8,8"
-                                                    Style="{StaticResource SecondaryButtonStyle}"
-                                                    Command="{Binding DataContext.OpenSelectedOutputFolderCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                                    Content="Open Folder" />
-                                        </WrapPanel>
-                                    </StackPanel>
-                                </Border>
-                            </StackPanel>
+                                            <TextBlock Margin="0,6,0,0"
+                                                       Text="Matches the global Blender executable from Settings unless changed.">
+                                                <TextBlock.Style>
+                                                    <Style TargetType="TextBlock" BasedOn="{StaticResource HelperTextStyle}">
+                                                        <Setter Property="Foreground" Value="{DynamicResource PrimaryBrush}" />
+                                                        <Setter Property="FontWeight" Value="SemiBold" />
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding Blender.BlenderExecutablePath}" Value="">
+                                                                <Setter Property="Foreground" Value="{DynamicResource MutedForegroundBrush}" />
+                                                                <Setter Property="FontWeight" Value="Normal" />
+                                                            </DataTrigger>
+                                                            <DataTrigger Binding="{Binding Blender.BlenderExecutablePath.Length}" Value="0">
+                                                                <Setter Property="Foreground" Value="{DynamicResource MutedForegroundBrush}" />
+                                                                <Setter Property="FontWeight" Value="Normal" />
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </TextBlock.Style>
+                                            </TextBlock>
 
-                            <StackPanel Width="520"
-                                        MinWidth="360"
-                                        Margin="0,0,0,18">
-                                <Border Style="{StaticResource InsetPanelCardStyle}">
-                                    <StackPanel>
-                                        <TextBlock Style="{StaticResource SectionTitleTextStyle}"
-                                                   Text="Blender" />
-                                        <TextBlock Margin="0,10,0,0"
-                                                   Style="{StaticResource FieldLabelTextStyle}"
-                                                   Text="Executable override" />
-                                        <Grid Margin="0,6,0,0">
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="*" />
-                                                <ColumnDefinition Width="8" />
-                                                <ColumnDefinition Width="Auto" />
-                                                <ColumnDefinition Width="8" />
-                                                <ColumnDefinition Width="Auto" />
-                                            </Grid.ColumnDefinitions>
-                                            <TextBox Grid.Column="0"
-                                                     Style="{StaticResource QueueTextBoxStyle}"
-                                                     Text="{Binding Blender.BlenderExecutablePath, UpdateSourceTrigger=PropertyChanged}" />
-                                            <Button Grid.Column="2"
-                                                    Style="{StaticResource SecondaryButtonStyle}"
-                                                    Command="{Binding DataContext.BrowseSelectedBlenderCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                                    Content="Browse" />
-                                            <Button Grid.Column="4"
-                                                    Style="{StaticResource SecondaryButtonStyle}"
-                                                    Command="{Binding DataContext.UseDefaultBlenderForSelectedJobCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                                    Content="Use Global" />
-                                        </Grid>
-                                        <TextBlock Margin="0,6,0,0"
-                                                   Style="{StaticResource HelperTextStyle}"
-                                                   Text="Leave empty to inherit the global Blender executable from Settings." />
-                                    </StackPanel>
-                                </Border>
+                                            <TextBlock Margin="0,14,0,0"
+                                                       Style="{StaticResource OverrideStatusTextStyle}"
+                                                       Tag="{Binding HasFrameOverride}"
+                                                       Text="{Binding FrameModeText}" />
+                                            <Grid Margin="0,6,0,0">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="8" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+                                                <ComboBox Grid.Column="0"
+                                                          Style="{StaticResource QueueOverrideComboBoxStyle}"
+                                                          Tag="{Binding HasFrameOverride}"
+                                                          ItemsSource="{Binding DataContext.FrameOverrideModes, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                          SelectedItem="{Binding Frames.Mode}"
+                                                          ToolTip="Choose whether this job renders a frame range or a single frame." />
+                                                <Button Grid.Column="2"
+                                                        Style="{StaticResource ResetIconButtonStyle}"
+                                                        Command="{Binding DataContext.ClearSelectedFrameOverridesCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                        ToolTip="Restore frame settings from the blend file." />
+                                            </Grid>
+                                            <TextBlock Margin="0,6,0,0"
+                                                       Style="{StaticResource HelperTextStyle}"
+                                                       Text="{Binding BlendFrameSummary}" />
+                                            <Grid Margin="0,10,0,0"
+                                                  Visibility="{Binding Frames.IsFrameRangeMode, Converter={StaticResource BoolToVis}}">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="8" />
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="8" />
+                                                    <ColumnDefinition Width="*" />
+                                                </Grid.ColumnDefinitions>
+                                                <Grid.RowDefinitions>
+                                                    <RowDefinition Height="Auto" />
+                                                    <RowDefinition Height="4" />
+                                                    <RowDefinition Height="Auto" />
+                                                </Grid.RowDefinitions>
+                                                <TextBlock Grid.Column="0"
+                                                           Style="{StaticResource HelperTextStyle}"
+                                                           Text="Start" />
+                                                <TextBlock Grid.Column="2"
+                                                           Style="{StaticResource HelperTextStyle}"
+                                                           Text="End" />
+                                                <TextBlock Grid.Column="4"
+                                                           Style="{StaticResource HelperTextStyle}"
+                                                           Text="Step" />
+                                                <TextBox Grid.Row="2"
+                                                         Grid.Column="0"
+                                                         Style="{StaticResource QueueOverrideTextBoxStyle}"
+                                                         Tag="{Binding HasFrameOverride}"
+                                                         Text="{Binding FrameStartInput, UpdateSourceTrigger=PropertyChanged}"
+                                                         ToolTip="Frame range start. Matches the blend file by default." />
+                                                <TextBox Grid.Row="2"
+                                                         Grid.Column="2"
+                                                         Style="{StaticResource QueueOverrideTextBoxStyle}"
+                                                         Tag="{Binding HasFrameOverride}"
+                                                         Text="{Binding FrameEndInput, UpdateSourceTrigger=PropertyChanged}"
+                                                         ToolTip="Frame range end. Matches the blend file by default." />
+                                                <TextBox Grid.Row="2"
+                                                         Grid.Column="4"
+                                                         Style="{StaticResource QueueOverrideTextBoxStyle}"
+                                                         Tag="{Binding HasFrameOverride}"
+                                                         Text="{Binding FrameStepInput, UpdateSourceTrigger=PropertyChanged}"
+                                                         ToolTip="Frame step. Matches the blend file by default." />
+                                            </Grid>
+                                            <StackPanel Margin="0,10,0,0"
+                                                        Visibility="{Binding Frames.IsSingleFrameMode, Converter={StaticResource BoolToVis}}">
+                                                <TextBlock Style="{StaticResource HelperTextStyle}"
+                                                           Text="Frame" />
+                                                <TextBox Margin="0,4,0,0"
+                                                         Style="{StaticResource QueueOverrideTextBoxStyle}"
+                                                         Tag="{Binding HasFrameOverride}"
+                                                         Text="{Binding SingleFrameInput, UpdateSourceTrigger=PropertyChanged}"
+                                                         ToolTip="Single frame number to render." />
+                                            </StackPanel>
 
-                                <Border Margin="0,18,0,0"
-                                        Style="{StaticResource InsetPanelCardStyle}">
-                                    <StackPanel>
-                                        <TextBlock Style="{StaticResource SectionTitleTextStyle}"
-                                                   Text="Frames" />
-                                        <Grid Margin="0,10,0,0">
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="Auto" />
-                                                <ColumnDefinition Width="8" />
-                                                <ColumnDefinition Width="*" />
-                                            </Grid.ColumnDefinitions>
-                                            <CheckBox Grid.Column="0"
-                                                      VerticalAlignment="Center"
-                                                      IsChecked="{Binding HasFrameOverride, Mode=TwoWay}" />
-                                            <TextBlock Grid.Column="2"
-                                                       VerticalAlignment="Center"
+                                            <TextBlock Margin="0,14,0,0"
+                                                       Style="{StaticResource OverrideStatusTextStyle}"
+                                                       Tag="{Binding HasOutputPathOverride}"
+                                                       Text="{Binding OutputPathModeText}" />
+                                            <TextBlock Margin="0,4,0,0"
                                                        Style="{StaticResource FieldLabelTextStyle}"
-                                                       Text="Override frames" />
-                                        </Grid>
-                                        <ComboBox Margin="0,10,0,0"
-                                                  IsEnabled="{Binding HasFrameOverride}"
-                                                  ItemsSource="{Binding DataContext.FrameOverrideModes, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                                  SelectedItem="{Binding Frames.Mode}" />
-                                        <TextBlock Margin="0,6,0,0"
-                                                   Style="{StaticResource HelperTextStyle}"
-                                                   Text="{Binding BlendFrameSummary}" />
-                                        <Grid Margin="0,12,0,0"
-                                              IsEnabled="{Binding HasFrameOverride}"
-                                              Visibility="{Binding Frames.IsFrameRangeMode, Converter={StaticResource BoolToVis}}">
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="*" />
-                                                <ColumnDefinition Width="8" />
-                                                <ColumnDefinition Width="*" />
-                                                <ColumnDefinition Width="8" />
-                                                <ColumnDefinition Width="*" />
-                                            </Grid.ColumnDefinitions>
-                                            <Grid.RowDefinitions>
-                                                <RowDefinition Height="Auto" />
-                                                <RowDefinition Height="4" />
-                                                <RowDefinition Height="Auto" />
-                                            </Grid.RowDefinitions>
-                                            <TextBlock Grid.Column="0"
+                                                       Text="Output path" />
+                                            <Grid Margin="0,6,0,0">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="8" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                    <ColumnDefinition Width="8" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+                                                <Border Grid.Column="0"
+                                                        Background="{DynamicResource InputBackgroundBrush}"
+                                                        BorderThickness="1"
+                                                        CornerRadius="{DynamicResource CornerRadiusControl}"
+                                                        Padding="12,8">
+                                                    <Border.Style>
+                                                        <Style TargetType="Border">
+                                                            <Setter Property="BorderBrush" Value="{DynamicResource PrimaryBrush}" />
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding HasOutputPathOverride}" Value="False">
+                                                                    <Setter Property="BorderBrush" Value="{DynamicResource InputBorderBrush}" />
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </Border.Style>
+                                                    <TextBlock Text="{Binding OutputPathDisplayText}"
+                                                               TextTrimming="CharacterEllipsis">
+                                                        <TextBlock.Style>
+                                                            <Style TargetType="TextBlock">
+                                                                <Setter Property="Foreground" Value="{DynamicResource PrimaryBrush}" />
+                                                                <Setter Property="FontWeight" Value="SemiBold" />
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding HasOutputPathOverride}" Value="False">
+                                                                        <Setter Property="Foreground" Value="{DynamicResource MutedForegroundBrush}" />
+                                                                        <Setter Property="FontWeight" Value="Normal" />
+                                                                        <Setter Property="Opacity" Value="0.72" />
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </TextBlock.Style>
+                                                    </TextBlock>
+                                                </Border>
+                                                <Button Grid.Column="2"
+                                                        Style="{StaticResource SecondaryButtonStyle}"
+                                                        Command="{Binding DataContext.BrowseSelectedOutputPathCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                        Content="Browse"
+                                                        ToolTip="Choose an output folder override." />
+                                                <Button Grid.Column="4"
+                                                        Style="{StaticResource ResetIconButtonStyle}"
+                                                        Command="{Binding DataContext.ClearSelectedOutputPathCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                        ToolTip="Use the output path from the blend file." />
+                                            </Grid>
+                                            <TextBlock Margin="0,6,0,0"
                                                        Style="{StaticResource HelperTextStyle}"
-                                                       Text="Start" />
-                                            <TextBlock Grid.Column="2"
+                                                       Text="{Binding OutputDirectoryHint}" />
+
+                                            <TextBlock Margin="0,14,0,0"
+                                                       Style="{StaticResource OverrideStatusTextStyle}"
+                                                       Tag="{Binding HasOutputNameOverride}"
+                                                       Text="{Binding OutputNameModeText}" />
+                                            <TextBlock Margin="0,4,0,0"
+                                                       Style="{StaticResource FieldLabelTextStyle}"
+                                                       Text="Render name" />
+                                            <Grid Margin="0,6,0,0">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="8" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+                                                <TextBox Grid.Column="0"
+                                                         Style="{StaticResource QueueOverrideTextBoxStyle}"
+                                                         Tag="{Binding HasOutputNameOverride}"
+                                                         Text="{Binding OutputNameInput, UpdateSourceTrigger=PropertyChanged}"
+                                                         ToolTip="Output file name. Matches the blend file by default." />
+                                                <Button Grid.Column="2"
+                                                        Style="{StaticResource ResetIconButtonStyle}"
+                                                        Command="{Binding DataContext.ClearSelectedOutputNameCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                        ToolTip="Use the render name from the blend file." />
+                                            </Grid>
+                                            <TextBlock Margin="0,6,0,0"
                                                        Style="{StaticResource HelperTextStyle}"
-                                                       Text="End" />
-                                            <TextBlock Grid.Column="4"
-                                                       Style="{StaticResource HelperTextStyle}"
-                                                       Text="Step" />
-                                            <TextBox Grid.Row="2"
-                                                     Grid.Column="0"
-                                                     Style="{StaticResource QueueTextBoxStyle}"
-                                                     Text="{Binding Frames.StartFrame, UpdateSourceTrigger=PropertyChanged}" />
-                                            <TextBox Grid.Row="2"
-                                                     Grid.Column="2"
-                                                     Style="{StaticResource QueueTextBoxStyle}"
-                                                     Text="{Binding Frames.EndFrame, UpdateSourceTrigger=PropertyChanged}" />
-                                            <TextBox Grid.Row="2"
-                                                     Grid.Column="4"
-                                                     Style="{StaticResource QueueTextBoxStyle}"
-                                                     Text="{Binding Frames.Step, UpdateSourceTrigger=PropertyChanged}" />
-                                        </Grid>
-                                        <StackPanel Margin="0,12,0,0"
-                                                    IsEnabled="{Binding HasFrameOverride}"
-                                                    Visibility="{Binding Frames.IsSingleFrameMode, Converter={StaticResource BoolToVis}}">
-                                            <TextBlock Style="{StaticResource HelperTextStyle}"
-                                                       Text="Frame" />
-                                            <TextBox Margin="0,4,0,0"
-                                                     Style="{StaticResource QueueTextBoxStyle}"
-                                                     Text="{Binding Frames.SingleFrame, UpdateSourceTrigger=PropertyChanged}" />
+                                                       Text="{Binding OutputNameHint}" />
                                         </StackPanel>
-                                    </StackPanel>
+                                    </Expander>
                                 </Border>
 
-                                <Border Margin="0,18,0,0"
+                                <Border Margin="0,0,0,8"
+                                        Padding="12"
                                         Style="{StaticResource InsetPanelCardStyle}">
-                                    <StackPanel>
-                                        <TextBlock Style="{StaticResource SectionTitleTextStyle}"
-                                                   Text="Output" />
-                                        <Grid Margin="0,10,0,0">
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="Auto" />
-                                                <ColumnDefinition Width="8" />
-                                                <ColumnDefinition Width="*" />
-                                            </Grid.ColumnDefinitions>
-                                            <CheckBox Grid.Column="0"
-                                                      VerticalAlignment="Top"
-                                                      IsChecked="{Binding HasOutputPathOverride, Mode=TwoWay}" />
-                                            <StackPanel Grid.Column="2">
-                                                <TextBlock Style="{StaticResource FieldLabelTextStyle}"
-                                                           Text="Output path" />
-                                                <TextBox Margin="0,6,0,0"
-                                                         IsEnabled="{Binding HasOutputPathOverride}"
-                                                         Style="{StaticResource QueueTextBoxStyle}"
-                                                         Text="{Binding Output.OutputPathTemplate, UpdateSourceTrigger=PropertyChanged}" />
-                                                <TextBlock Margin="0,6,0,0"
-                                                           Style="{StaticResource HelperTextStyle}"
-                                                           Text="{Binding OutputDirectoryHint}" />
-                                            </StackPanel>
-                                        </Grid>
-                                        <Grid Margin="0,12,0,0">
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="Auto" />
-                                                <ColumnDefinition Width="8" />
-                                                <ColumnDefinition Width="*" />
-                                            </Grid.ColumnDefinitions>
-                                            <CheckBox Grid.Column="0"
-                                                      VerticalAlignment="Top"
-                                                      IsChecked="{Binding HasOutputNameOverride, Mode=TwoWay}" />
-                                            <StackPanel Grid.Column="2">
-                                                <TextBlock Style="{StaticResource FieldLabelTextStyle}"
-                                                           Text="Render name" />
-                                                <TextBox Margin="0,6,0,0"
-                                                         IsEnabled="{Binding HasOutputNameOverride}"
-                                                         Style="{StaticResource QueueTextBoxStyle}"
-                                                         Text="{Binding Output.OutputFileNameTemplate, UpdateSourceTrigger=PropertyChanged}" />
-                                                <TextBlock Margin="0,6,0,0"
-                                                           Style="{StaticResource HelperTextStyle}"
-                                                           Text="{Binding OutputNameHint}" />
-                                            </StackPanel>
-                                        </Grid>
-                                    </StackPanel>
+                                    <Expander IsExpanded="False"
+                                              ToolTip="Blend file targeting: scene, camera, and view layer.">
+                                        <Expander.Header>
+                                            <TextBlock Style="{StaticResource SectionTitleTextStyle}"
+                                                       Foreground="{DynamicResource TextForegroundBrush}"
+                                                       Text="Blend File" />
+                                        </Expander.Header>
+                                        <StackPanel Margin="0,10,0,0">
+                                            <TextBlock Style="{StaticResource FieldLabelTextStyle}"
+                                                       Text="Scene" />
+                                            <Grid Margin="0,6,0,0">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="8" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+                                                <ComboBox Grid.Column="0"
+                                                          Style="{StaticResource QueueOverrideComboBoxStyle}"
+                                                          Tag="{Binding HasSceneOverride}"
+                                                          IsEnabled="{Binding Targeting.IsInspectionReady}"
+                                                          ItemsSource="{Binding Targeting.AvailableSceneOptions}"
+                                                          SelectedItem="{Binding Targeting.SceneSelection, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                          ToolTip="Select a scene override, or use the blend file default." />
+                                                <Button Grid.Column="2"
+                                                        Style="{StaticResource ResetIconButtonStyle}"
+                                                        Command="{Binding DataContext.ClearSelectedSceneCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                        ToolTip="Use the blend file scene." />
+                                            </Grid>
+                                            <TextBlock Margin="0,6,0,0"
+                                                       Style="{StaticResource HelperTextStyle}"
+                                                       Text="{Binding Targeting.SceneHint}" />
+
+                                            <TextBlock Margin="0,12,0,0"
+                                                       Style="{StaticResource FieldLabelTextStyle}"
+                                                       Text="Camera" />
+                                            <Grid Margin="0,6,0,0">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="8" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+                                                <ComboBox Grid.Column="0"
+                                                          Style="{StaticResource QueueOverrideComboBoxStyle}"
+                                                          Tag="{Binding HasCameraOverride}"
+                                                          IsEnabled="{Binding Targeting.IsInspectionReady}"
+                                                          ItemsSource="{Binding Targeting.AvailableCameraOptions}"
+                                                          SelectedItem="{Binding Targeting.CameraSelection, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                          ToolTip="Select a camera override, or use the blend file default." />
+                                                <Button Grid.Column="2"
+                                                        Style="{StaticResource ResetIconButtonStyle}"
+                                                        Command="{Binding DataContext.ClearSelectedCameraCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                        ToolTip="Use the blend file camera." />
+                                            </Grid>
+                                            <TextBlock Margin="0,6,0,0"
+                                                       Style="{StaticResource HelperTextStyle}"
+                                                       Text="{Binding Targeting.CameraHint}" />
+
+                                            <TextBlock Margin="0,12,0,0"
+                                                       Style="{StaticResource FieldLabelTextStyle}"
+                                                       Text="View Layer" />
+                                            <Grid Margin="0,6,0,0">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="8" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+                                                <ComboBox Grid.Column="0"
+                                                          Style="{StaticResource QueueOverrideComboBoxStyle}"
+                                                          Tag="{Binding HasViewLayerOverride}"
+                                                          IsEnabled="{Binding Targeting.IsInspectionReady}"
+                                                          ItemsSource="{Binding Targeting.AvailableViewLayerOptions}"
+                                                          SelectedItem="{Binding Targeting.ViewLayerSelection, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                          ToolTip="Select a view layer override, or use the blend file default." />
+                                                <Button Grid.Column="2"
+                                                        Style="{StaticResource ResetIconButtonStyle}"
+                                                        Command="{Binding DataContext.ClearSelectedViewLayerCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                        ToolTip="Use the blend file view layer." />
+                                            </Grid>
+                                            <TextBlock Margin="0,6,0,0"
+                                                       Style="{StaticResource HelperTextStyle}"
+                                                       Text="{Binding Targeting.ViewLayerHint}" />
+                                        </StackPanel>
+                                    </Expander>
                                 </Border>
 
-                                <Border Margin="0,18,0,0"
-                                        Style="{StaticResource InsetPanelCardStyle}">
-                                    <StackPanel>
-                                        <TextBlock Style="{StaticResource SectionTitleTextStyle}"
-                                                   Text="Scene / Camera / View Layer" />
-                                        <Grid Margin="0,10,0,0">
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="Auto" />
-                                                <ColumnDefinition Width="8" />
-                                                <ColumnDefinition Width="*" />
-                                            </Grid.ColumnDefinitions>
-                                            <CheckBox Grid.Column="0"
-                                                      VerticalAlignment="Top"
-                                                      IsChecked="{Binding Targeting.HasSceneOverride, Mode=TwoWay}" />
-                                            <StackPanel Grid.Column="2">
-                                                <TextBlock Style="{StaticResource FieldLabelTextStyle}"
-                                                           Text="Scene" />
-                                                <ComboBox Margin="0,6,0,0"
-                                                          IsEnabled="{Binding Targeting.IsSceneSelectorEnabled}"
-                                                          ItemsSource="{Binding Targeting.AvailableSceneNames}"
-                                                          SelectedValue="{Binding Targeting.SceneName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
-                                                <TextBlock Margin="0,6,0,0"
-                                                           Style="{StaticResource HelperTextStyle}"
-                                                           Text="{Binding Targeting.SceneHint}" />
-                                            </StackPanel>
-                                        </Grid>
-                                        <Grid Margin="0,12,0,0">
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="Auto" />
-                                                <ColumnDefinition Width="8" />
-                                                <ColumnDefinition Width="*" />
-                                            </Grid.ColumnDefinitions>
-                                            <CheckBox Grid.Column="0"
-                                                      VerticalAlignment="Top"
-                                                      IsChecked="{Binding Targeting.HasCameraOverride, Mode=TwoWay}" />
-                                            <StackPanel Grid.Column="2">
-                                                <TextBlock Style="{StaticResource FieldLabelTextStyle}"
-                                                           Text="Camera" />
-                                                <ComboBox Margin="0,6,0,0"
-                                                          IsEnabled="{Binding Targeting.IsCameraSelectorEnabled}"
-                                                          ItemsSource="{Binding Targeting.AvailableCameraNames}"
-                                                          SelectedValue="{Binding Targeting.CameraName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
-                                                <TextBlock Margin="0,6,0,0"
-                                                           Style="{StaticResource HelperTextStyle}"
-                                                           Text="{Binding Targeting.CameraHint}" />
-                                            </StackPanel>
-                                        </Grid>
-                                        <Grid Margin="0,12,0,0">
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="Auto" />
-                                                <ColumnDefinition Width="8" />
-                                                <ColumnDefinition Width="*" />
-                                            </Grid.ColumnDefinitions>
-                                            <CheckBox Grid.Column="0"
-                                                      VerticalAlignment="Top"
-                                                      IsChecked="{Binding Targeting.HasViewLayerOverride, Mode=TwoWay}" />
-                                            <StackPanel Grid.Column="2">
-                                                <TextBlock Style="{StaticResource FieldLabelTextStyle}"
-                                                           Text="View Layer" />
-                                                <ComboBox Margin="0,6,0,0"
-                                                          IsEnabled="{Binding Targeting.IsViewLayerSelectorEnabled}"
-                                                          ItemsSource="{Binding Targeting.AvailableViewLayerNames}"
-                                                          SelectedValue="{Binding Targeting.ViewLayerName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
-                                                <TextBlock Margin="0,6,0,0"
-                                                           Style="{StaticResource HelperTextStyle}"
-                                                           Text="{Binding Targeting.ViewLayerHint}" />
-                                            </StackPanel>
-                                        </Grid>
-                                    </StackPanel>
-                                </Border>
-
-                                <Border Margin="0,18,0,0"
-                                        Style="{StaticResource InsetPanelCardStyle}">
-                                    <StackPanel>
-                                        <TextBlock Style="{StaticResource SectionTitleTextStyle}"
-                                                   Text="Diagnostics" />
-                                        <TextBlock Margin="0,10,0,0"
-                                                   Style="{StaticResource HelperTextStyle}"
-                                                   Text="{Binding Runtime.LastErrorSummaryText}" />
-                                        <TextBlock Margin="0,10,0,0"
-                                                   Style="{StaticResource HelperTextStyle}"
-                                                   Text="{Binding ResolvedOutputPattern}" />
-                                    </StackPanel>
+                                <Border Style="{StaticResource InsetPanelCardStyle}"
+                                        Padding="12">
+                                    <Expander IsExpanded="False"
+                                              ToolTip="Reserved for future RenderSet settings.">
+                                        <Expander.Header>
+                                            <TextBlock Style="{StaticResource SectionTitleTextStyle}"
+                                                       Foreground="{DynamicResource TextForegroundBrush}"
+                                                       Text="RenderSet" />
+                                        </Expander.Header>
+                                    </Expander>
                                 </Border>
                             </StackPanel>
-                        </WrapPanel>
-                    </StackPanel>
-                </ScrollViewer>
-            </Border>
+                        </StackPanel>
+                    </ScrollViewer>
+                </Border>
+            </Grid>
         </Grid>
 
         <Border Grid.Row="4"
                 Style="{StaticResource PanelCardStyle}"
                 Padding="12">
-            <Expander IsExpanded="{Binding LogsExpanded, Mode=TwoWay}">
+            <Expander IsExpanded="{Binding LogsExpanded, Mode=TwoWay}"
+                      ToolTip="Show or hide render logs for the selected job.">
                 <Expander.Header>
                     <DockPanel LastChildFill="False">
                         <TextBlock DockPanel.Dock="Left"
                                    Style="{StaticResource SectionTitleTextStyle}"
+                                   Foreground="{DynamicResource TextForegroundBrush}"
                                    Text="Logs" />
                         <Button DockPanel.Dock="Right"
                                 Margin="14,0,0,0"
-                                Padding="10,4"
+                                Padding="12,6"
                                 Style="{StaticResource SecondaryButtonStyle}"
                                 Command="{Binding OpenSelectedLogFileCommand}"
-                                Content="Open Log File" />
+                                Content="Open Log File"
+                                ToolTip="Open the latest log file for the selected job." />
                     </DockPanel>
                 </Expander.Header>
                 <TextBox x:Name="LogTextBox"
@@ -666,6 +833,7 @@
                          IsReadOnly="True"
                          Text="{Binding SelectedJobLogOutput, Mode=OneWay}"
                          TextChanged="LogTextBox_TextChanged"
+                         ToolTip="Render output log for the selected job."
                          TextWrapping="Wrap"
                          VerticalScrollBarVisibility="Auto" />
             </Expander>

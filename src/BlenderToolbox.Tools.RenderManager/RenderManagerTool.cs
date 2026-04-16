@@ -13,7 +13,8 @@ public sealed class RenderManagerTool : IToolDefinition, IStatefulTool
     public RenderManagerTool(
         IJsonSettingsStore settingsStore,
         GlobalSettingsService globalSettingsService,
-        IFilePickerService filePickerService)
+        IFilePickerService filePickerService,
+        IFolderPickerService folderPickerService)
     {
         var paths = new RenderManagerPaths();
         var overrideScriptBuilder = new RenderOverrideScriptBuilder();
@@ -28,7 +29,8 @@ public sealed class RenderManagerTool : IToolDefinition, IStatefulTool
             new RenderJobLogWriter(),
             paths,
             globalSettingsService,
-            filePickerService);
+            filePickerService,
+            folderPickerService);
 
         View = new RenderManagerView
         {

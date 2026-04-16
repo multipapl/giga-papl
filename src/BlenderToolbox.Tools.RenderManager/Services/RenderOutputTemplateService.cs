@@ -33,6 +33,11 @@ public sealed class RenderOutputTemplateService
         return ResolveBlendOutputDefaults(job).UsesFallback;
     }
 
+    public string ResolveOriginalOutputName(RenderQueueItemViewModelLike job)
+    {
+        return ResolveBlendOutputDefaults(job).Name;
+    }
+
     public string BuildOutputPattern(RenderQueueItemViewModelLike job)
     {
         var directory = ResolveOutputDirectory(job);

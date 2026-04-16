@@ -4,15 +4,17 @@ namespace BlenderToolbox.Tools.RenderManager.ViewModels.Jobs;
 
 public partial class JobOutputViewModel : ObservableObject
 {
+    public const string BlenderDefaultLabel = "Blender Default";
+
     public bool HasOutputNameOverride
     {
-        get => OutputFileNameOverrideEnabled;
+        get => !string.IsNullOrWhiteSpace(OutputFileNameTemplate);
         set => SetOutputNameOverride(value, OutputFileNameTemplate);
     }
 
     public bool HasOutputPathOverride
     {
-        get => OutputPathOverrideEnabled;
+        get => !string.IsNullOrWhiteSpace(OutputPathTemplate);
         set => SetOutputPathOverride(value, OutputPathTemplate);
     }
 
@@ -23,8 +25,8 @@ public partial class JobOutputViewModel : ObservableObject
             return;
         }
 
-        OutputFileNameOverrideEnabled = enabled;
         OutputFileNameTemplate = enabled ? resolvedOutputName : string.Empty;
+        OutputFileNameOverrideEnabled = HasOutputNameOverride;
         OnPropertyChanged(nameof(HasOutputNameOverride));
     }
 
@@ -35,8 +37,8 @@ public partial class JobOutputViewModel : ObservableObject
             return;
         }
 
-        OutputPathOverrideEnabled = enabled;
         OutputPathTemplate = enabled ? resolvedOutputDirectory : string.Empty;
+        OutputPathOverrideEnabled = HasOutputPathOverride;
         OnPropertyChanged(nameof(HasOutputPathOverride));
     }
 
@@ -59,6 +61,7 @@ public partial class JobOutputViewModel : ObservableObject
 
     partial void OnOutputFileNameTemplateChanged(string value)
     {
+        SyncOutputNameOverrideFlag();
         OnPropertyChanged(nameof(HasOutputNameOverride));
     }
 
@@ -69,6 +72,25 @@ public partial class JobOutputViewModel : ObservableObject
 
     partial void OnOutputPathTemplateChanged(string value)
     {
+        SyncOutputPathOverrideFlag();
         OnPropertyChanged(nameof(HasOutputPathOverride));
+    }
+
+    private void SyncOutputNameOverrideFlag()
+    {
+        var hasOverride = HasOutputNameOverride;
+        if (OutputFileNameOverrideEnabled != hasOverride)
+        {
+            OutputFileNameOverrideEnabled = hasOverride;
+        }
+    }
+
+    private void SyncOutputPathOverrideFlag()
+    {
+        var hasOverride = HasOutputPathOverride;
+        if (OutputPathOverrideEnabled != hasOverride)
+        {
+            OutputPathOverrideEnabled = hasOverride;
+        }
     }
 }

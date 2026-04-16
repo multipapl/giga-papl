@@ -23,6 +23,21 @@ public partial class RenderManagerView : UserControl
         }
     }
 
+    private void DetailsScrollViewer_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
+    {
+        if (sender is not ScrollViewer scrollViewer)
+        {
+            return;
+        }
+
+        e.Handled = true;
+        var targetOffset = Math.Clamp(
+            scrollViewer.VerticalOffset - e.Delta,
+            0,
+            scrollViewer.ScrollableHeight);
+        scrollViewer.ScrollToVerticalOffset(targetOffset);
+    }
+
     private void QueueGrid_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
         _dragStartPoint = e.GetPosition(null);

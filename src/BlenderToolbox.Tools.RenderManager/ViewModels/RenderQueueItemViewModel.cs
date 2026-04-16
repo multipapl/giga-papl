@@ -1,5 +1,4 @@
 using System.ComponentModel;
-using System.IO;
 using System.Windows.Media.Imaging;
 using BlenderToolbox.Tools.RenderManager.Models;
 using BlenderToolbox.Tools.RenderManager.ViewModels.Jobs;
@@ -23,15 +22,15 @@ public sealed class RenderQueueItemViewModel : RenderJobViewModel
     {
         Id = item.Id;
         IsEnabled = item.IsEnabled;
-        Name = item.Name;
         BlendFilePath = item.BlendFilePath;
         BlenderExecutablePath = item.BlenderExecutablePath;
-        Mode = item.Mode;
-        FrameOverrideEnabled = item.FrameOverrideEnabled || item.Mode != RenderMode.Animation;
-        StartFrame = item.StartFrame;
-        EndFrame = item.EndFrame;
-        Step = item.Step;
-        SingleFrame = item.SingleFrame;
+        var hasFrameOverride = HasStoredFrameOverride(item);
+        Mode = item.Mode == RenderMode.SingleFrame ? RenderMode.SingleFrame : RenderMode.FrameRange;
+        StartFrame = hasFrameOverride ? item.StartFrame : string.Empty;
+        EndFrame = hasFrameOverride ? item.EndFrame : string.Empty;
+        Step = hasFrameOverride ? item.Step : string.Empty;
+        SingleFrame = hasFrameOverride ? item.SingleFrame : string.Empty;
+        FrameOverrideEnabled = hasFrameOverride;
         SceneName = item.SceneName;
         SceneOverrideEnabled = item.SceneOverrideEnabled || !string.IsNullOrWhiteSpace(item.SceneName);
         CameraName = item.CameraName;
@@ -40,9 +39,9 @@ public sealed class RenderQueueItemViewModel : RenderJobViewModel
         ViewLayerOverrideEnabled = item.ViewLayerOverrideEnabled || !string.IsNullOrWhiteSpace(item.ViewLayerName);
         CompletedFrameRenderSeconds = item.CompletedFrameRenderSeconds;
         OutputPathTemplate = NormalizeLegacyOutputPathOverride(item.OutputPathTemplate);
-        OutputPathOverrideEnabled = item.OutputPathOverrideEnabled || !string.IsNullOrWhiteSpace(OutputPathTemplate);
+        OutputPathOverrideEnabled = HasOutputPathOverride;
         OutputFileNameTemplate = NormalizeLegacyOutputNameOverride(item.OutputFileNameTemplate);
-        OutputFileNameOverrideEnabled = item.OutputFileNameOverrideEnabled || !string.IsNullOrWhiteSpace(OutputFileNameTemplate);
+        OutputFileNameOverrideEnabled = HasOutputNameOverride;
         Status = item.Status;
         ProgressValue = item.ProgressValue;
         ProgressText = item.ProgressText;
@@ -137,11 +136,11 @@ public sealed class RenderQueueItemViewModel : RenderJobViewModel
             Frames.FrameOverrideEnabled = value;
             if (!value)
             {
-                Frames.Mode = RenderMode.Animation;
+                Frames.Mode = RenderMode.FrameRange;
                 Frames.StartFrame = string.Empty;
                 Frames.EndFrame = string.Empty;
                 Frames.SingleFrame = string.Empty;
-                Frames.Step = "1";
+                Frames.Step = string.Empty;
             }
             else
             {
@@ -407,15 +406,11 @@ public sealed class RenderQueueItemViewModel : RenderJobViewModel
 
     public static new RenderQueueItemViewModel CreateNew(string blendFilePath)
     {
-        var fileName = string.IsNullOrWhiteSpace(blendFilePath)
-            ? "New render job"
-            : Path.GetFileNameWithoutExtension(blendFilePath);
-
         var job = new RenderQueueItemViewModel
         {
-            Name = fileName,
             BlendFilePath = blendFilePath,
             BlenderExecutablePath = string.Empty,
+            Mode = RenderMode.FrameRange,
             OutputPathTemplate = string.Empty,
             OutputFileNameTemplate = string.Empty,
         };
@@ -433,7 +428,6 @@ public sealed class RenderQueueItemViewModel : RenderJobViewModel
     {
         var duplicate = ToModel();
         duplicate.Id = Guid.NewGuid().ToString("N");
-        duplicate.Name = $"{EffectiveName} Copy";
         var duplicateViewModel = FromModel(duplicate);
         duplicateViewModel.ResetRuntimeState($"Queue item duplicated from {EffectiveName}.");
         duplicateViewModel.Status = RenderJobStatus.Pending;
@@ -548,19 +542,27 @@ public sealed class RenderQueueItemViewModel : RenderJobViewModel
         {
             case nameof(JobOutputViewModel.OutputPathTemplate):
                 OnPropertyChanged(nameof(OutputPathTemplate));
+                OnPropertyChanged(nameof(OutputPathModeText));
+                OnPropertyChanged(nameof(OutputPathDisplayText));
                 break;
             case nameof(JobOutputViewModel.OutputPathOverrideEnabled):
             case nameof(JobOutputViewModel.HasOutputPathOverride):
                 OnPropertyChanged(nameof(OutputPathOverrideEnabled));
                 OnPropertyChanged(nameof(HasOutputPathOverride));
+                OnPropertyChanged(nameof(OutputPathModeText));
+                OnPropertyChanged(nameof(OutputPathDisplayText));
                 break;
             case nameof(JobOutputViewModel.OutputFileNameTemplate):
                 OnPropertyChanged(nameof(OutputFileNameTemplate));
+                OnPropertyChanged(nameof(OutputNameModeText));
+                OnPropertyChanged(nameof(OutputNameInput));
                 break;
             case nameof(JobOutputViewModel.OutputFileNameOverrideEnabled):
             case nameof(JobOutputViewModel.HasOutputNameOverride):
                 OnPropertyChanged(nameof(OutputFileNameOverrideEnabled));
                 OnPropertyChanged(nameof(HasOutputNameOverride));
+                OnPropertyChanged(nameof(OutputNameModeText));
+                OnPropertyChanged(nameof(OutputNameInput));
                 break;
         }
     }
@@ -693,5 +695,15 @@ public sealed class RenderQueueItemViewModel : RenderJobViewModel
         return string.Equals(value?.Trim(), "[BLEND_PATH]\\renders", StringComparison.OrdinalIgnoreCase)
             ? string.Empty
             : value ?? string.Empty;
+    }
+
+    private static bool HasStoredFrameOverride(RenderQueueItem item)
+    {
+        return item.FrameOverrideEnabled
+            || item.Mode == RenderMode.SingleFrame
+            || !string.IsNullOrWhiteSpace(item.StartFrame)
+            || !string.IsNullOrWhiteSpace(item.EndFrame)
+            || !string.IsNullOrWhiteSpace(item.SingleFrame)
+            || (!string.Equals(item.Step?.Trim(), "1", StringComparison.Ordinal) && !string.IsNullOrWhiteSpace(item.Step));
     }
 }
