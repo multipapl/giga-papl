@@ -92,6 +92,78 @@ public sealed class RenderManagerArchitectureTests
     }
 
     [Fact]
+    public void RenderCommandBuilder_BuildsRendersetCommandWithoutStandardRenderFlags()
+    {
+        using var temp = new TempFilesScope();
+        var paths = new RenderManagerPaths($"BlenderToolbox.Tests.{Guid.NewGuid():N}");
+        var builder = new RenderCommandBuilder(paths, new RenderOverrideScriptBuilder());
+        var job = RenderQueueItemViewModel.CreateNew(temp.BlendPath);
+        job.BlenderExecutablePath = temp.BlenderPath;
+        job.UseRenderset = true;
+        job.ApplyInspection(new BlendInspectionSnapshot
+        {
+            Renderset = new RendersetInspectionSnapshot
+            {
+                HasRenderset = true,
+                Contexts =
+                [
+                    new RendersetContextSnapshot
+                    {
+                        Index = 0,
+                        Name = "Context A",
+                        IncludeInRenderAll = true,
+                    },
+                ],
+            },
+        });
+
+        var plan = builder.Build(job, temp.BlenderPath, default);
+
+        Assert.True(plan.UsesRenderset);
+        Assert.Contains("--python", plan.Arguments);
+        Assert.Contains("--", plan.Arguments);
+        Assert.DoesNotContain("--render-anim", plan.Arguments);
+        Assert.DoesNotContain("-a", plan.Arguments);
+        Assert.DoesNotContain("--render-frame", plan.Arguments);
+        Assert.DoesNotContain("--scene", plan.Arguments);
+        Assert.Contains("Context A", plan.Arguments.Last());
+        Assert.True(File.Exists(plan.OverrideScriptPath));
+    }
+
+    [Fact]
+    public void RenderJobValidationService_UsesRendersetValidationBranch()
+    {
+        using var temp = new TempFilesScope();
+        var job = RenderQueueItemViewModel.CreateNew(temp.BlendPath);
+        job.BlenderExecutablePath = temp.BlenderPath;
+        job.UseRenderset = true;
+        job.ApplyInspection(new BlendInspectionSnapshot
+        {
+            Renderset = new RendersetInspectionSnapshot
+            {
+                HasRenderset = true,
+                Contexts =
+                [
+                    new RendersetContextSnapshot
+                    {
+                        Index = 0,
+                        Name = "Context A",
+                        IncludeInRenderAll = true,
+                    },
+                ],
+            },
+        });
+        job.Renderset.Contexts[0].IsSelected = false;
+
+        var validation = new RenderJobValidationService().Validate(job, string.Empty);
+
+        Assert.False(validation.IsValid);
+        Assert.Contains(
+            validation.Errors,
+            static error => error.Contains("Select at least one RenderSet context", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void RenderManagerStores_RoundTripSettingsAndQueue()
     {
         var backingStore = new MemorySettingsStore();

@@ -55,6 +55,47 @@ public sealed class RenderManagerTests
     }
 
     [Fact]
+    public void RendersetOutputParser_ParsesDoneMarker()
+    {
+        var parsed = RendersetOutputParser.TryParse(
+            @"<<RSET_DONE>> {""Index"":1,""Name"":""Context B"",""Folders"":[""Q:/renders/b""]}");
+
+        Assert.NotNull(parsed);
+        Assert.Equal(RendersetRenderEventKind.Done, parsed.Kind);
+        Assert.Equal(1, parsed.Index);
+        Assert.Equal("Context B", parsed.Name);
+        Assert.Equal(["Q:/renders/b"], parsed.Folders);
+    }
+
+    [Fact]
+    public void RendersetOutputParser_ParsesFrameMarker()
+    {
+        var parsed = RendersetOutputParser.TryParse(
+            @"<<RSET_FRAME>> {""Index"":0,""Name"":""Context A"",""Frame"":7,""Folder"":""Q:/renders/a""}");
+
+        Assert.NotNull(parsed);
+        Assert.Equal(RendersetRenderEventKind.Frame, parsed.Kind);
+        Assert.Equal(0, parsed.Index);
+        Assert.Equal("Context A", parsed.Name);
+        Assert.Equal(7, parsed.Frame);
+        Assert.Equal("Q:/renders/a", parsed.Folder);
+    }
+
+    [Fact]
+    public void RendersetOutputParser_ParsesStartMarker()
+    {
+        var parsed = RendersetOutputParser.TryParse(
+            @"<<RSET_START>> {""Index"":0,""Name"":""Context A"",""RenderType"":""animation"",""FrameStart"":10,""FrameEnd"":20,""FrameStep"":2}");
+
+        Assert.NotNull(parsed);
+        Assert.Equal(RendersetRenderEventKind.Start, parsed.Kind);
+        Assert.Equal("animation", parsed.RenderType);
+        Assert.Equal(10, parsed.FrameStart);
+        Assert.Equal(20, parsed.FrameEnd);
+        Assert.Equal(2, parsed.FrameStep);
+    }
+
+    [Fact]
     public void RenderQueueItemViewModel_ResetRuntimeState_ClearsRuntimeFieldsAndRestoresReadyStatus()
     {
         var job = RenderQueueItemViewModel.CreateNew(@"Q:\shots\scene.blend");
@@ -68,6 +109,7 @@ public sealed class RenderManagerTests
         job.LastReportedFrameNumber = 12;
         job.LastCompletedFrameNumber = 11;
         job.LastKnownOutputPath = @"Q:\shots\renders\scene_0012.png";
+        job.LastKnownOutputFolderPath = @"Q:\shots\renders";
         job.LastErrorSummary = "Blender exit code: 1";
         job.LastStartedUtc = DateTimeOffset.Now.AddMinutes(-3);
         job.LastCompletedUtc = DateTimeOffset.Now.AddMinutes(-1);
@@ -88,6 +130,7 @@ public sealed class RenderManagerTests
         Assert.Null(job.PreviewImageSource);
         Assert.Equal("Preview will appear after the first saved frame.", job.PreviewStatusText);
         Assert.Equal(string.Empty, job.LastKnownOutputPath);
+        Assert.Equal(string.Empty, job.LastKnownOutputFolderPath);
         Assert.Equal("Waiting for the first saved frame.", job.PreviewPathText);
         Assert.Equal(string.Empty, job.LastErrorSummary);
         Assert.Null(job.LastStartedUtc);

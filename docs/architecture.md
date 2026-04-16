@@ -48,4 +48,4 @@ Each tool provides:
 - This is acceptable for the current repo size because it keeps startup simple and explicit.
 - If the tool list grows significantly, registration can move into a small `ToolCatalog` without introducing a plugin system.
 - Render Manager is a local desktop queue runner, not a farm scheduler or multi-machine render manager.
-- RenderSet research exists in docs, but RenderSet execution is not part of the active implementation.
+- Render Manager supports RenderSet batch execution for files that are already configured with RenderSet contexts.

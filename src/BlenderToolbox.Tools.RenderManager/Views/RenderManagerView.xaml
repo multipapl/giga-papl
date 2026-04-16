@@ -361,7 +361,7 @@
                                     <DataTemplate>
                                         <TextBlock TextWrapping="Wrap"
                                                    MaxHeight="42"
-                                                   Text="{Binding ResolvedOutputDirectory, Mode=OneWay}" />
+                                                   Text="{Binding EffectiveOutputDirectory, Mode=OneWay}" />
                                     </DataTemplate>
                                 </DataGridTemplateColumn.CellTemplate>
                             </DataGridTemplateColumn>
@@ -532,6 +532,7 @@
                                                 </TextBlock.Style>
                                             </TextBlock>
 
+                                            <StackPanel IsEnabled="{Binding IsStandardRenderSettingsEnabled}">
                                             <TextBlock Margin="0,14,0,0"
                                                        Style="{StaticResource OverrideStatusTextStyle}"
                                                        Tag="{Binding HasFrameOverride}"
@@ -696,6 +697,7 @@
                                             <TextBlock Margin="0,6,0,0"
                                                        Style="{StaticResource HelperTextStyle}"
                                                        Text="{Binding OutputNameHint}" />
+                                            </StackPanel>
                                         </StackPanel>
                                     </Expander>
                                 </Border>
@@ -710,7 +712,8 @@
                                                        Foreground="{DynamicResource TextForegroundBrush}"
                                                        Text="Blend File" />
                                         </Expander.Header>
-                                        <StackPanel Margin="0,10,0,0">
+                                        <StackPanel Margin="0,10,0,0"
+                                                    IsEnabled="{Binding IsStandardRenderSettingsEnabled}">
                                             <TextBlock Style="{StaticResource FieldLabelTextStyle}"
                                                        Text="Scene" />
                                             <Grid Margin="0,6,0,0">
@@ -791,12 +794,74 @@
                                 <Border Style="{StaticResource InsetPanelCardStyle}"
                                         Padding="12">
                                     <Expander IsExpanded="False"
-                                              ToolTip="Reserved for future RenderSet settings.">
+                                              ToolTip="Render files that are already configured with RenderSet contexts.">
                                         <Expander.Header>
                                             <TextBlock Style="{StaticResource SectionTitleTextStyle}"
                                                        Foreground="{DynamicResource TextForegroundBrush}"
                                                        Text="RenderSet" />
                                         </Expander.Header>
+                                        <StackPanel Margin="0,10,0,0">
+                                            <CheckBox Content="Use RenderSet"
+                                                      IsChecked="{Binding Renderset.UseRenderset, Mode=TwoWay}"
+                                                      ToolTip="Render selected RenderSet contexts instead of applying Render Manager overrides." />
+                                            <TextBlock Margin="0,8,0,0"
+                                                       Style="{StaticResource HelperTextStyle}"
+                                                       Text="{Binding Renderset.SummaryText}" />
+
+                                            <ItemsControl Margin="0,10,0,0"
+                                                          ItemsSource="{Binding Renderset.Contexts}"
+                                                          IsEnabled="{Binding Renderset.UseRenderset}">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate>
+                                                        <Border Margin="0,0,0,6"
+                                                                Padding="10,8"
+                                                                Background="{DynamicResource InputBackgroundBrush}"
+                                                                BorderBrush="{DynamicResource InputBorderBrush}"
+                                                                BorderThickness="1"
+                                                                CornerRadius="{DynamicResource CornerRadiusControl}">
+                                                            <Grid>
+                                                                <Grid.ColumnDefinitions>
+                                                                    <ColumnDefinition Width="Auto" />
+                                                                    <ColumnDefinition Width="*" />
+                                                                    <ColumnDefinition Width="90" />
+                                                                    <ColumnDefinition Width="130" />
+                                                                </Grid.ColumnDefinitions>
+                                                                <CheckBox Grid.Column="0"
+                                                                          Margin="0,0,10,0"
+                                                                          VerticalAlignment="Center"
+                                                                          IsChecked="{Binding IsSelected, Mode=TwoWay}" />
+                                                                <TextBlock Grid.Column="1"
+                                                                           VerticalAlignment="Center"
+                                                                           Text="{Binding DisplayName}"
+                                                                           TextTrimming="CharacterEllipsis"
+                                                                           ToolTip="{Binding OutputFolderHint}" />
+                                                                <TextBlock Grid.Column="2"
+                                                                           Margin="10,0,0,0"
+                                                                           VerticalAlignment="Center"
+                                                                           Style="{StaticResource HelperTextStyle}"
+                                                                           Text="{Binding RenderTypeDisplay}" />
+                                                                <TextBlock Grid.Column="3"
+                                                                           Margin="10,0,0,0"
+                                                                           VerticalAlignment="Center"
+                                                                           Style="{StaticResource HelperTextStyle}"
+                                                                           Text="{Binding CameraDisplay}"
+                                                                           TextTrimming="CharacterEllipsis" />
+                                                            </Grid>
+                                                        </Border>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+
+                                            <TextBlock Margin="0,10,0,0"
+                                                       Style="{StaticResource FieldLabelTextStyle}"
+                                                       Text="Current context" />
+                                            <ProgressBar Margin="0,6,0,0"
+                                                         Height="6"
+                                                         Value="{Binding Renderset.ContextProgressValue, Mode=OneWay}" />
+                                            <TextBlock Margin="0,5,0,0"
+                                                       Style="{StaticResource HelperTextStyle}"
+                                                       Text="{Binding Renderset.CurrentContextSummary}" />
+                                        </StackPanel>
                                     </Expander>
                                 </Border>
                             </StackPanel>

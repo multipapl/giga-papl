@@ -158,6 +158,9 @@ public sealed class RenderQueueItemCleanupBehaviorTests
         job.SingleFrame = "42";
         job.OutputFileNameTemplate = "shot_[FRAME]";
         job.SceneName = "Scene_A";
+        job.Renderset.UseRenderset = true;
+        job.Renderset.InitializeSelection(["Context A"], hasExplicitSelection: true);
+        job.Runtime.LastKnownOutputFolderPath = @"Q:\renders\renderset";
         job.Status = RenderJobStatus.Rendering;
 
         Assert.Equal("scene", job.EffectiveName);
@@ -166,7 +169,10 @@ public sealed class RenderQueueItemCleanupBehaviorTests
         Assert.Equal("42", job.Frames.SingleFrame);
         Assert.Equal("shot_[FRAME]", job.Output.OutputFileNameTemplate);
         Assert.Equal("Scene_A", job.Targeting.SceneName);
+        Assert.True(job.Renderset.UseRenderset);
         Assert.Equal(RenderJobStatus.Rendering, job.Runtime.Status);
+        Assert.Equal(["Context A"], job.ToModel().SelectedRendersetContextNames);
+        Assert.Equal(@"Q:\renders\renderset", job.ToModel().LastKnownOutputFolderPath);
     }
 
     [Fact]

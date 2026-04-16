@@ -9,9 +9,10 @@ Short entry point for people and agents working in this repo.
 - [UI And Theme](./ui-and-theme.md)
 - [Build And Release](./build-and-release.md)
 
-## Reference Only
+## RenderSet
 
-- [Renderset Integration](./renderset-integration.md) is research material, not an active implemented feature.
+- [Renderset Integration](./renderset-integration.md) is the API research reference behind the active integration.
+- [RenderSet Render Manager Specification](./renderset-render-manager-spec.md) describes the Render Manager batch integration.
 
 ## Current State
 

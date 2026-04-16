@@ -28,6 +28,8 @@ public partial class RenderManagerViewModel : ObservableObject
         nameof(RenderQueueItemViewModel.ElapsedText),
         nameof(RenderQueueItemViewModel.BlendFilePath),
         nameof(RenderQueueItemViewModel.LastKnownOutputPath),
+        nameof(RenderQueueItemViewModel.LastKnownOutputFolderPath),
+        nameof(RenderQueueItemViewModel.UseRenderset),
     ];
 
     private readonly BlendInspectionService _blendInspectionService;
@@ -112,8 +114,8 @@ public partial class RenderManagerViewModel : ObservableObject
                 return 0;
             }
 
-            var finishedJobs = enabledJobs.Count(job => IsQueueJobFinished(job.Status));
-            return (double)finishedJobs / enabledJobs.Count * 100;
+            return enabledJobs.Average(static job =>
+                IsQueueJobFinished(job.Status) ? 100 : Math.Clamp(job.ProgressValue, 0, 100));
         }
     }
 
@@ -652,6 +654,19 @@ public partial class RenderManagerViewModel : ObservableObject
 
     private void OpenOutputFolder(RenderQueueItemViewModel job)
     {
+        if (job.UseRenderset)
+        {
+            var rendersetDirectory = job.LastKnownOutputFolderPath.Trim();
+            if (string.IsNullOrWhiteSpace(rendersetDirectory) || !Directory.Exists(rendersetDirectory))
+            {
+                SetStatus("RenderSet output folder is not available yet.", StatusTone.Neutral);
+                return;
+            }
+
+            OpenPath(rendersetDirectory);
+            return;
+        }
+
         var directory = !string.IsNullOrWhiteSpace(job.LastKnownOutputPath) && File.Exists(job.LastKnownOutputPath)
             ? Path.GetDirectoryName(job.LastKnownOutputPath)
             : job.ResolvedOutputDirectory;
@@ -715,7 +730,7 @@ public partial class RenderManagerViewModel : ObservableObject
         _runScope = scope;
         _scheduledStopMode = null;
 
-        var isResume = resumePausedJob && IsPausedJob(job);
+        var isResume = resumePausedJob && IsPausedJob(job) && !job.UseRenderset;
         var resumePlan = isResume ? RenderResumePlanner.Create(job) : default;
 
         if (!isResume)
@@ -740,6 +755,7 @@ public partial class RenderManagerViewModel : ObservableObject
     private void PrepareJobForFreshRun(RenderQueueItemViewModel job)
     {
         job.ResetRuntimeState("Queue item prepared for render.");
+        job.Renderset.ResetRuntimeContextProgress();
         job.Status = job.HasInspection ? RenderJobStatus.Ready : RenderJobStatus.Pending;
     }
 
@@ -893,7 +909,9 @@ public partial class RenderManagerViewModel : ObservableObject
 
         try
         {
-            if (!Directory.Exists(plan.OutputDirectory))
+            if (!plan.UsesRenderset &&
+                !string.IsNullOrWhiteSpace(plan.OutputDirectory) &&
+                !Directory.Exists(plan.OutputDirectory))
             {
                 Directory.CreateDirectory(plan.OutputDirectory);
                 AppendLog(job, $"Created output directory: {plan.OutputDirectory}");
@@ -904,7 +922,7 @@ public partial class RenderManagerViewModel : ObservableObject
             AppendLog(job, $"Warning: could not create output directory: {ex.Message}");
         }
 
-        if (plan.UsesBlendOutputFallback)
+        if (!plan.UsesRenderset && plan.UsesBlendOutputFallback)
         {
             AppendLog(job, $"Blend output path is empty or default. Using fallback: {job.ResolvedOutputPattern}");
         }
@@ -912,7 +930,10 @@ public partial class RenderManagerViewModel : ObservableObject
         AppendLog(job, $"> {plan.ArgumentsDisplayText}");
 
         using var process = new Process { StartInfo = plan.CreateStartInfo() };
-        var progressContext = new JobProgressContext(ComputeTotalFrames(job));
+        var progressContext = new JobProgressContext(ComputeTotalFrames(job))
+        {
+            TotalContexts = job.UseRenderset ? Math.Max(1, job.SelectedRendersetContextCount) : 0,
+        };
         _framesCompleted = resumePlan.CompletedFrameCount;
         var stopwatch = Stopwatch.StartNew();
 
@@ -937,7 +958,8 @@ public partial class RenderManagerViewModel : ObservableObject
                 while (await process.StandardOutput.ReadLineAsync(ct) is { } line)
                 {
                     var progress = BlenderOutputParser.TryParse(line);
-                    PostToUi(() => HandleProcessOutputLine(job, line, progress, progressContext, stopwatch));
+                    var rendersetEvent = RendersetOutputParser.TryParse(line);
+                    PostToUi(() => HandleProcessOutputLine(job, line, progress, rendersetEvent, progressContext, stopwatch));
                 }
             }
             catch (OperationCanceledException) { }
@@ -952,7 +974,8 @@ public partial class RenderManagerViewModel : ObservableObject
                 while (await process.StandardError.ReadLineAsync(ct) is { } line)
                 {
                     var progress = BlenderOutputParser.TryParse(line);
-                    PostToUi(() => HandleProcessOutputLine(job, line, progress, progressContext, stopwatch));
+                    var rendersetEvent = RendersetOutputParser.TryParse(line);
+                    PostToUi(() => HandleProcessOutputLine(job, line, progress, rendersetEvent, progressContext, stopwatch));
                 }
             }
             catch (OperationCanceledException) { }
@@ -1022,10 +1045,17 @@ public partial class RenderManagerViewModel : ObservableObject
         RenderQueueItemViewModel job,
         string line,
         BlenderProgress? progress,
+        RendersetRenderEvent? rendersetEvent,
         JobProgressContext progressContext,
         Stopwatch stopwatch)
     {
         AppendLogRaw(job, line);
+
+        if (rendersetEvent is { } parsedRendersetEvent)
+        {
+            HandleRendersetEvent(job, parsedRendersetEvent, progressContext);
+            return;
+        }
 
         if (progress is not { } parsed)
         {
@@ -1033,6 +1063,13 @@ public partial class RenderManagerViewModel : ObservableObject
         }
 
         job.ElapsedText = FormatElapsed(stopwatch.Elapsed);
+
+        if (job.UseRenderset)
+        {
+            HandleRendersetBlenderProgress(job, parsed, progressContext);
+            RefreshComputedState();
+            return;
+        }
 
         if (parsed.AnimationStartFrame != 0 || parsed.AnimationEndFrame != 0)
         {
@@ -1116,6 +1153,297 @@ public partial class RenderManagerViewModel : ObservableObject
         RefreshComputedState();
     }
 
+    private void HandleRendersetEvent(
+        RenderQueueItemViewModel job,
+        RendersetRenderEvent rendersetEvent,
+        JobProgressContext progressContext)
+    {
+        switch (rendersetEvent.Kind)
+        {
+            case RendersetRenderEventKind.Job:
+                progressContext.TotalContexts = Math.Max(1, rendersetEvent.TotalContexts);
+                job.TotalRuntimeRendersetContextCount = progressContext.TotalContexts;
+                job.CompletedRendersetContextCount = 0;
+                job.ProgressText = $"0/{progressContext.TotalContexts} contexts";
+                job.ProgressValue = 0;
+                break;
+
+            case RendersetRenderEventKind.Start:
+                progressContext.CurrentContextCompletedFrames = 0;
+                progressContext.CurrentContextStartFrame = rendersetEvent.FrameStart;
+                progressContext.CurrentContextEndFrame = rendersetEvent.FrameEnd;
+                progressContext.CurrentContextStep = Math.Max(1, rendersetEvent.FrameStep);
+                progressContext.CurrentContextTotalFrames = ComputeContextFrameCount(rendersetEvent);
+                job.CurrentRendersetContextName = DisplayOrPlaceholder(rendersetEvent.Name, $"Context {rendersetEvent.Index + 1}");
+                job.RendersetContextProgressValue = 0;
+                job.RendersetContextProgressText = progressContext.CurrentContextTotalFrames > 1
+                    ? $"Frame 1/{progressContext.CurrentContextTotalFrames}"
+                    : "Rendering context...";
+                UpdateRendersetJobProgress(job, progressContext, 0);
+                break;
+
+            case RendersetRenderEventKind.Frame:
+                HandleRendersetFrameEvent(job, rendersetEvent, progressContext);
+                break;
+
+            case RendersetRenderEventKind.Done:
+                ApplyRendersetOutputFolders(job, rendersetEvent.Folders);
+                progressContext.CompletedContexts++;
+                job.CompletedRendersetContextCount = progressContext.CompletedContexts;
+                job.RendersetContextProgressValue = 100;
+                job.RendersetContextProgressText = "Context completed";
+                UpdateRendersetJobProgress(job, progressContext, 0);
+                break;
+
+            case RendersetRenderEventKind.Error:
+                job.LastErrorSummary = DisplayOrPlaceholder(rendersetEvent.Error, "RenderSet context failed.");
+                job.RendersetContextProgressText = "Context failed";
+                break;
+
+            case RendersetRenderEventKind.AllDone:
+                ApplyRendersetOutputFolders(job, rendersetEvent.Folders);
+                job.RendersetContextProgressValue = 100;
+                job.RendersetContextProgressText = "RenderSet completed";
+                job.ProgressValue = 100;
+                break;
+        }
+
+        RefreshComputedState();
+    }
+
+    private void HandleRendersetBlenderProgress(
+        RenderQueueItemViewModel job,
+        BlenderProgress parsed,
+        JobProgressContext progressContext)
+    {
+        if (parsed.SavedPath is not null)
+        {
+            // RenderSet first saves to a temporary folder and moves files in render_finished().
+            return;
+        }
+
+        if (parsed.FrameNumber > 0)
+        {
+            job.LastReportedFrameNumber = parsed.FrameNumber;
+        }
+
+        if (parsed.SampleTotal > 0)
+        {
+            var sampleFraction = (double)parsed.SampleCurrent / parsed.SampleTotal;
+            var contextFraction = ComputeRendersetContextFrameFraction(
+                parsed,
+                progressContext,
+                sampleFraction);
+            job.RendersetContextProgressValue = contextFraction * 100;
+            job.RendersetContextProgressText = progressContext.CurrentContextTotalFrames > 1
+                ? BuildRendersetContextProgressText(parsed.FrameNumber, progressContext)
+                : $"Sample {parsed.SampleCurrent}/{parsed.SampleTotal}";
+            UpdateRendersetJobProgress(job, progressContext, contextFraction);
+        }
+        else if (parsed.FrameNumber > 0)
+        {
+            job.RendersetContextProgressText = BuildRendersetContextProgressText(parsed.FrameNumber, progressContext);
+        }
+    }
+
+    private void HandleRendersetFrameEvent(
+        RenderQueueItemViewModel job,
+        RendersetRenderEvent rendersetEvent,
+        JobProgressContext progressContext)
+    {
+        if (rendersetEvent.Frame > 0)
+        {
+            job.LastReportedFrameNumber = rendersetEvent.Frame;
+            job.LastCompletedFrameNumber = rendersetEvent.Frame;
+        }
+
+        progressContext.CurrentContextCompletedFrames++;
+        if (progressContext.CurrentContextTotalFrames > 0)
+        {
+            progressContext.CurrentContextCompletedFrames = Math.Min(
+                progressContext.CurrentContextCompletedFrames,
+                progressContext.CurrentContextTotalFrames);
+        }
+
+        var totalFrames = progressContext.CurrentContextTotalFrames;
+        var completedFrames = progressContext.CurrentContextCompletedFrames;
+        var fraction = totalFrames > 0
+            ? Math.Clamp((double)completedFrames / totalFrames, 0, 1)
+            : 1;
+
+        job.RendersetContextProgressValue = fraction * 100;
+        job.RendersetContextProgressText = totalFrames > 1
+            ? $"Frame {Math.Min(completedFrames, totalFrames)}/{totalFrames}"
+            : "Rendering context...";
+        UpdateRendersetJobProgress(job, progressContext, 0);
+
+        ApplyRendersetFrameFolder(job, rendersetEvent.Folder);
+
+        if (_scheduledStopMode == QueueStopMode.AfterCurrentFrame)
+        {
+            _renderCts?.Cancel();
+        }
+    }
+
+    private void ApplyRendersetFrameFolder(RenderQueueItemViewModel job, string folder)
+    {
+        var trimmed = folder?.Trim() ?? string.Empty;
+        if (string.IsNullOrEmpty(trimmed))
+        {
+            return;
+        }
+
+        if (Directory.Exists(trimmed) || string.IsNullOrWhiteSpace(job.LastKnownOutputFolderPath))
+        {
+            job.LastKnownOutputFolderPath = trimmed;
+        }
+
+        var previewPath = FindLatestPreviewableFile(new[] { trimmed });
+        if (string.IsNullOrWhiteSpace(previewPath))
+        {
+            return;
+        }
+
+        job.LastKnownOutputPath = previewPath;
+        if (job.IsSelected)
+        {
+            _ = UpdateJobPreviewAsync(job, previewPath);
+        }
+    }
+
+    private void ApplyRendersetOutputFolders(RenderQueueItemViewModel job, IReadOnlyList<string> folders)
+    {
+        var outputFolder = ResolveBestExistingFolder(folders);
+        if (!string.IsNullOrWhiteSpace(outputFolder))
+        {
+            job.LastKnownOutputFolderPath = outputFolder;
+        }
+
+        var previewPath = FindLatestPreviewableFile(folders);
+        if (string.IsNullOrWhiteSpace(previewPath))
+        {
+            if (!string.IsNullOrWhiteSpace(job.LastKnownOutputFolderPath))
+            {
+                job.PreviewStatusText = "RenderSet output folder is ready. No previewable image was found.";
+            }
+
+            return;
+        }
+
+        job.LastKnownOutputPath = previewPath;
+        if (job.IsSelected)
+        {
+            _ = UpdateJobPreviewAsync(job, previewPath);
+        }
+    }
+
+    private static string ResolveBestExistingFolder(IReadOnlyList<string> folders)
+    {
+        return folders
+            .Where(static folder => !string.IsNullOrWhiteSpace(folder))
+            .Select(static folder => folder.Trim())
+            .OrderByDescending(static folder => Directory.Exists(folder) ? Directory.GetLastWriteTimeUtc(folder) : DateTime.MinValue)
+            .FirstOrDefault()
+            ?? string.Empty;
+    }
+
+    private static string FindLatestPreviewableFile(IReadOnlyList<string> folders)
+    {
+        var candidates = folders
+            .Where(static folder => !string.IsNullOrWhiteSpace(folder) && Directory.Exists(folder.Trim()))
+            .SelectMany(static folder => Directory.EnumerateFiles(folder.Trim(), "*.*", SearchOption.AllDirectories))
+            .Where(IsPreviewableImagePath)
+            .Select(static path => new FileInfo(path))
+            .Where(static info => info.Exists)
+            .OrderByDescending(static info => info.LastWriteTimeUtc)
+            .FirstOrDefault();
+
+        return candidates?.FullName ?? string.Empty;
+    }
+
+    private static bool IsPreviewableImagePath(string path)
+    {
+        var extension = Path.GetExtension(path);
+        return extension.Equals(".png", StringComparison.OrdinalIgnoreCase)
+               || extension.Equals(".jpg", StringComparison.OrdinalIgnoreCase)
+               || extension.Equals(".jpeg", StringComparison.OrdinalIgnoreCase)
+               || extension.Equals(".tif", StringComparison.OrdinalIgnoreCase)
+               || extension.Equals(".tiff", StringComparison.OrdinalIgnoreCase)
+               || extension.Equals(".bmp", StringComparison.OrdinalIgnoreCase)
+               || extension.Equals(".exr", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static int ComputeContextFrameCount(RendersetRenderEvent rendersetEvent)
+    {
+        if (string.Equals(rendersetEvent.RenderType, "animation", StringComparison.OrdinalIgnoreCase) &&
+            rendersetEvent.FrameEnd >= rendersetEvent.FrameStart)
+        {
+            var step = Math.Max(1, rendersetEvent.FrameStep);
+            return Math.Max(1, ((rendersetEvent.FrameEnd - rendersetEvent.FrameStart) / step) + 1);
+        }
+
+        return 1;
+    }
+
+    private static double ComputeRendersetContextFrameFraction(
+        BlenderProgress progress,
+        JobProgressContext progressContext,
+        double currentFrameFraction)
+    {
+        if (progressContext.CurrentContextTotalFrames <= 1)
+        {
+            return Math.Clamp(Math.Max(currentFrameFraction, progress.IsFrameFinished ? 1 : 0), 0, 1);
+        }
+
+        var frameIndex = ResolveRendersetContextFrameIndex(progress.FrameNumber, progressContext);
+        var completedBeforeCurrentFrame = Math.Max(0, frameIndex - 1);
+        if (progress.IsFrameFinished)
+        {
+            completedBeforeCurrentFrame = Math.Max(completedBeforeCurrentFrame, progressContext.CurrentContextCompletedFrames);
+            currentFrameFraction = 0;
+        }
+
+        return Math.Clamp(
+            (completedBeforeCurrentFrame + currentFrameFraction) / progressContext.CurrentContextTotalFrames,
+            0,
+            1);
+    }
+
+    private static int ResolveRendersetContextFrameIndex(int frameNumber, JobProgressContext progressContext)
+    {
+        if (frameNumber <= 0)
+        {
+            return Math.Clamp(progressContext.CurrentContextCompletedFrames + 1, 1, Math.Max(1, progressContext.CurrentContextTotalFrames));
+        }
+
+        var start = progressContext.CurrentContextStartFrame;
+        var step = Math.Max(1, progressContext.CurrentContextStep);
+        return Math.Clamp(((frameNumber - start) / step) + 1, 1, Math.Max(1, progressContext.CurrentContextTotalFrames));
+    }
+
+    private static string BuildRendersetContextProgressText(int frameNumber, JobProgressContext progressContext)
+    {
+        if (progressContext.CurrentContextTotalFrames <= 1)
+        {
+            return frameNumber > 0 ? $"Frame {frameNumber}" : "Rendering context...";
+        }
+
+        var frameIndex = ResolveRendersetContextFrameIndex(frameNumber, progressContext);
+        return $"Frame {frameIndex}/{progressContext.CurrentContextTotalFrames}";
+    }
+
+    private static void UpdateRendersetJobProgress(
+        RenderQueueItemViewModel job,
+        JobProgressContext progressContext,
+        double currentContextFraction)
+    {
+        var totalContexts = Math.Max(1, progressContext.TotalContexts);
+        var progressValue = (progressContext.CompletedContexts + currentContextFraction) / totalContexts * 100;
+        job.ProgressValue = Math.Clamp(progressValue, 0, 100);
+        job.ProgressText = $"{Math.Min(progressContext.CompletedContexts + 1, totalContexts)}/{totalContexts} contexts";
+        job.EtaText = string.Empty;
+    }
+
     private void FinalizeRunState(bool wasCanceled)
     {
         if (wasCanceled)
@@ -1188,7 +1516,7 @@ public partial class RenderManagerViewModel : ObservableObject
 
             AppendLog(
                 job,
-                $"Loaded blend defaults | Scene: {DisplayOrPlaceholder(inspection.SceneName, "n/a")} | Camera: {DisplayOrPlaceholder(inspection.CameraName, "n/a")} | View Layer: {DisplayOrPlaceholder(inspection.ViewLayerName, "n/a")} | Format: {DisplayOrPlaceholder(inspection.OutputFormat, "n/a")}");
+                $"Loaded blend defaults | Scene: {DisplayOrPlaceholder(inspection.SceneName, "n/a")} | Camera: {DisplayOrPlaceholder(inspection.CameraName, "n/a")} | View Layer: {DisplayOrPlaceholder(inspection.ViewLayerName, "n/a")} | Format: {DisplayOrPlaceholder(inspection.OutputFormat, "n/a")} | RenderSet contexts: {inspection.Renderset.Contexts.Count}");
 
             if (!string.IsNullOrWhiteSpace(successStatusMessage))
             {
@@ -1495,6 +1823,7 @@ public partial class RenderManagerViewModel : ObservableObject
         OnPropertyChanged(nameof(SelectedJobTitle));
 
         if (e.PropertyName is nameof(RenderQueueItemViewModel.LastKnownOutputPath)
+            or nameof(RenderQueueItemViewModel.LastKnownOutputFolderPath)
             or nameof(RenderQueueItemViewModel.LastLogFilePath)
             or nameof(RenderQueueItemViewModel.BlendFilePath))
         {
@@ -1669,8 +1998,10 @@ public partial class RenderManagerViewModel : ObservableObject
     private bool CanOpenSelectedOutputFolder()
     {
         return SelectedJob is not null &&
-               (!string.IsNullOrWhiteSpace(SelectedJob.ResolvedOutputDirectory) ||
-                !string.IsNullOrWhiteSpace(SelectedJob.LastKnownOutputPath));
+               (SelectedJob.UseRenderset
+                   ? !string.IsNullOrWhiteSpace(SelectedJob.LastKnownOutputFolderPath)
+                   : (!string.IsNullOrWhiteSpace(SelectedJob.ResolvedOutputDirectory) ||
+                      !string.IsNullOrWhiteSpace(SelectedJob.LastKnownOutputPath)));
     }
 
     private bool CanOpenSelectedOutputFile()
@@ -1721,7 +2052,21 @@ public partial class RenderManagerViewModel : ObservableObject
 
         public int AnimationStartFrame { get; set; }
 
+        public int CompletedContexts { get; set; }
+
+        public int CurrentContextCompletedFrames { get; set; }
+
+        public int CurrentContextEndFrame { get; set; }
+
+        public int CurrentContextStartFrame { get; set; }
+
+        public int CurrentContextStep { get; set; } = 1;
+
+        public int CurrentContextTotalFrames { get; set; } = 1;
+
         public double ElapsedAtLastCompletedFrameSeconds { get; set; }
+
+        public int TotalContexts { get; set; }
 
         public int TotalFrames { get; set; }
     }

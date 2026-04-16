@@ -14,6 +14,7 @@ public sealed class RenderQueueItemViewModel : RenderJobViewModel
         Frames.PropertyChanged += OnFlatChildPropertyChanged;
         Output.PropertyChanged += OnFlatChildPropertyChanged;
         Targeting.PropertyChanged += OnFlatChildPropertyChanged;
+        Renderset.PropertyChanged += OnFlatChildPropertyChanged;
         Runtime.PropertyChanged += OnFlatChildPropertyChanged;
     }
 
@@ -37,6 +38,8 @@ public sealed class RenderQueueItemViewModel : RenderJobViewModel
         CameraOverrideEnabled = item.CameraOverrideEnabled || !string.IsNullOrWhiteSpace(item.CameraName);
         ViewLayerName = item.ViewLayerName;
         ViewLayerOverrideEnabled = item.ViewLayerOverrideEnabled || !string.IsNullOrWhiteSpace(item.ViewLayerName);
+        UseRenderset = item.UseRenderset;
+        Renderset.InitializeSelection(item.SelectedRendersetContextNames, item.UseRenderset);
         CompletedFrameRenderSeconds = item.CompletedFrameRenderSeconds;
         OutputPathTemplate = NormalizeLegacyOutputPathOverride(item.OutputPathTemplate);
         OutputPathOverrideEnabled = HasOutputPathOverride;
@@ -51,6 +54,7 @@ public sealed class RenderQueueItemViewModel : RenderJobViewModel
         LastReportedFrameNumber = item.LastReportedFrameNumber;
         LastCompletedFrameNumber = item.LastCompletedFrameNumber;
         LastKnownOutputPath = item.LastKnownOutputPath;
+        LastKnownOutputFolderPath = item.LastKnownOutputFolderPath;
         LastLogFilePath = item.LastLogFilePath;
         PreviewStatusText = string.IsNullOrWhiteSpace(item.LastKnownOutputPath)
             ? JobRuntimeViewModel.DefaultPreviewStatusText
@@ -60,6 +64,7 @@ public sealed class RenderQueueItemViewModel : RenderJobViewModel
         LastStartedUtc = item.LastStartedUtc;
         LastCompletedUtc = item.LastCompletedUtc;
         Inspection = item.Inspection;
+        Renderset.ApplyInspection(item.Inspection?.Renderset);
         InspectionState = Inspection is null ? InspectionState.NotInspected : InspectionState.Ready;
     }
 
@@ -276,6 +281,50 @@ public sealed class RenderQueueItemViewModel : RenderJobViewModel
 
     public string ResolvedViewLayerName => Targeting.ResolvedViewLayerName;
 
+    public bool UseRenderset
+    {
+        get => Renderset.UseRenderset;
+        set => Renderset.UseRenderset = value;
+    }
+
+    public IReadOnlyList<string> SelectedRendersetContextNames => Renderset.SelectedContextNames;
+
+    public int SelectedRendersetContextCount => Renderset.SelectedContextCount;
+
+    public int TotalRendersetContextCount => Renderset.TotalContextCount;
+
+    public string RendersetSummaryText => Renderset.SummaryText;
+
+    public double RendersetContextProgressValue
+    {
+        get => Renderset.ContextProgressValue;
+        set => Renderset.ContextProgressValue = value;
+    }
+
+    public string RendersetContextProgressText
+    {
+        get => Renderset.ContextProgressText;
+        set => Renderset.ContextProgressText = value;
+    }
+
+    public string CurrentRendersetContextName
+    {
+        get => Renderset.CurrentContextName;
+        set => Renderset.CurrentContextName = value;
+    }
+
+    public int CompletedRendersetContextCount
+    {
+        get => Renderset.CompletedContextCount;
+        set => Renderset.CompletedContextCount = value;
+    }
+
+    public int TotalRuntimeRendersetContextCount
+    {
+        get => Renderset.TotalRuntimeContextCount;
+        set => Renderset.TotalRuntimeContextCount = value;
+    }
+
     public IReadOnlyList<string> AvailableSceneNames => Targeting.AvailableSceneNames;
 
     public IReadOnlyList<string> AvailableCameraNames => Targeting.AvailableCameraNames;
@@ -348,6 +397,12 @@ public sealed class RenderQueueItemViewModel : RenderJobViewModel
     {
         get => Runtime.LastKnownOutputPath;
         set => Runtime.LastKnownOutputPath = value;
+    }
+
+    public string LastKnownOutputFolderPath
+    {
+        get => Runtime.LastKnownOutputFolderPath;
+        set => Runtime.LastKnownOutputFolderPath = value;
     }
 
     public string LastLogFilePath
@@ -437,6 +492,7 @@ public sealed class RenderQueueItemViewModel : RenderJobViewModel
     public new void ApplyInspection(BlendInspectionSnapshot inspection)
     {
         Targeting.ApplyInspection(inspection, preserveSelections: false);
+        Renderset.ApplyInspection(inspection.Renderset);
     }
 
     public void AppendBufferedLogLine(string line)
@@ -480,6 +536,10 @@ public sealed class RenderQueueItemViewModel : RenderJobViewModel
         else if (sender == Targeting)
         {
             NotifyTargetingChanged(e.PropertyName);
+        }
+        else if (sender == Renderset)
+        {
+            NotifyRendersetChanged(e.PropertyName);
         }
         else if (sender == Runtime)
         {
@@ -614,6 +674,45 @@ public sealed class RenderQueueItemViewModel : RenderJobViewModel
         }
     }
 
+    private void NotifyRendersetChanged(string? propertyName)
+    {
+        switch (propertyName)
+        {
+            case nameof(JobRendersetViewModel.UseRenderset):
+                OnPropertyChanged(nameof(UseRenderset));
+                OnPropertyChanged(nameof(UsesRenderset));
+                OnPropertyChanged(nameof(IsStandardRenderSettingsEnabled));
+                OnPropertyChanged(nameof(EffectiveOutputDirectory));
+                break;
+            case nameof(JobRendersetViewModel.SelectedContextNames):
+            case nameof(JobRendersetViewModel.SelectedContextCount):
+                OnPropertyChanged(nameof(SelectedRendersetContextNames));
+                OnPropertyChanged(nameof(SelectedRendersetContextCount));
+                break;
+            case nameof(JobRendersetViewModel.TotalContextCount):
+                OnPropertyChanged(nameof(TotalRendersetContextCount));
+                break;
+            case nameof(JobRendersetViewModel.SummaryText):
+                OnPropertyChanged(nameof(RendersetSummaryText));
+                break;
+            case nameof(JobRendersetViewModel.ContextProgressValue):
+                OnPropertyChanged(nameof(RendersetContextProgressValue));
+                break;
+            case nameof(JobRendersetViewModel.ContextProgressText):
+                OnPropertyChanged(nameof(RendersetContextProgressText));
+                break;
+            case nameof(JobRendersetViewModel.CurrentContextName):
+                OnPropertyChanged(nameof(CurrentRendersetContextName));
+                break;
+            case nameof(JobRendersetViewModel.CompletedContextCount):
+                OnPropertyChanged(nameof(CompletedRendersetContextCount));
+                break;
+            case nameof(JobRendersetViewModel.TotalRuntimeContextCount):
+                OnPropertyChanged(nameof(TotalRuntimeRendersetContextCount));
+                break;
+        }
+    }
+
     private void NotifyRuntimeChanged(string? propertyName)
     {
         switch (propertyName)
@@ -648,9 +747,12 @@ public sealed class RenderQueueItemViewModel : RenderJobViewModel
                 OnPropertyChanged(nameof(LastCompletedFrameNumber));
                 break;
             case nameof(JobRuntimeViewModel.LastKnownOutputPath):
+            case nameof(JobRuntimeViewModel.LastKnownOutputFolderPath):
             case nameof(JobRuntimeViewModel.PreviewPathText):
                 OnPropertyChanged(nameof(LastKnownOutputPath));
+                OnPropertyChanged(nameof(LastKnownOutputFolderPath));
                 OnPropertyChanged(nameof(PreviewPathText));
+                OnPropertyChanged(nameof(EffectiveOutputDirectory));
                 break;
             case nameof(JobRuntimeViewModel.LastLogFilePath):
                 OnPropertyChanged(nameof(LastLogFilePath));

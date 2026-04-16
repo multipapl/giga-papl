@@ -87,6 +87,9 @@ public sealed class BlendInspectionService
             }
 
             snapshot.InspectedAtUtc = DateTimeOffset.UtcNow;
+            var blendInfo = new FileInfo(blendFilePath);
+            snapshot.BlendFileSizeBytes = blendInfo.Length;
+            snapshot.BlendFileLastWriteUtc = blendInfo.LastWriteTimeUtc;
             return snapshot;
         }
         catch (TimeoutException ex)
@@ -123,6 +126,12 @@ public sealed class BlendInspectionService
             import bpy
             import json
 
+            def safe_call(default, callback):
+                try:
+                    return callback()
+                except Exception:
+                    return default
+
             def get_scene_camera_names(scene):
                 if scene is None:
                     return sorted({obj.name for obj in bpy.data.objects if obj.type == "CAMERA"})
@@ -138,6 +147,35 @@ public sealed class BlendInspectionService
                         return layer.name
 
                 return scene.view_layers[0].name
+
+            def inspect_renderset_contexts(scene):
+                contexts = getattr(scene, "renderset_contexts", None)
+                if contexts is None:
+                    return {
+                        "HasRenderset": False,
+                        "Contexts": [],
+                    }
+
+                items = []
+                for index, context in enumerate(contexts):
+                    camera = safe_call(None, lambda: context.get_camera()) if hasattr(context, "get_camera") else None
+                    output_folder_hint = ""
+                    if hasattr(context, "generate_output_folder_path"):
+                        output_folder_hint = safe_call("", lambda: context.generate_output_folder_path())
+
+                    items.append({
+                        "Index": index,
+                        "Name": getattr(context, "custom_name", "") or f"Context {index + 1}",
+                        "IncludeInRenderAll": bool(getattr(context, "include_in_render_all", False)),
+                        "RenderType": getattr(context, "render_type", "") or "",
+                        "CameraName": camera.name if camera else "",
+                        "OutputFolderHint": output_folder_hint or "",
+                    })
+
+                return {
+                    "HasRenderset": len(items) > 0,
+                    "Contexts": items,
+                }
 
             scenes = list(bpy.data.scenes)
             scene = bpy.context.scene
@@ -180,6 +218,7 @@ public sealed class BlendInspectionService
                 "OutputFormat": scene.render.image_settings.file_format if scene else "",
                 "RawOutputPath": scene.render.filepath if scene else "",
                 "ResolvedOutputPath": bpy.path.abspath(scene.render.filepath) if scene and scene.render.filepath else "",
+                "Renderset": inspect_renderset_contexts(scene),
                 "SceneCameras": scene_camera_map,
                 "SceneCollections": scene_collection_map,
                 "SceneName": scene.name if scene else "",

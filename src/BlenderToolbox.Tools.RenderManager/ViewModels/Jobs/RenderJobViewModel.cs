@@ -16,6 +16,7 @@ public partial class RenderJobViewModel : ObservableObject
             new JobFramesViewModel(),
             new JobOutputViewModel(),
             new JobTargetingViewModel(),
+            new JobRendersetViewModel(),
             new JobRuntimeViewModel())
     {
     }
@@ -26,6 +27,7 @@ public partial class RenderJobViewModel : ObservableObject
         JobFramesViewModel frames,
         JobOutputViewModel output,
         JobTargetingViewModel targeting,
+        JobRendersetViewModel renderset,
         JobRuntimeViewModel runtime)
     {
         Header = header;
@@ -33,6 +35,7 @@ public partial class RenderJobViewModel : ObservableObject
         Frames = frames;
         Output = output;
         Targeting = targeting;
+        Renderset = renderset;
         Runtime = runtime;
 
         Header.PropertyChanged += OnChildPropertyChanged;
@@ -40,6 +43,7 @@ public partial class RenderJobViewModel : ObservableObject
         Frames.PropertyChanged += OnChildPropertyChanged;
         Output.PropertyChanged += OnChildPropertyChanged;
         Targeting.PropertyChanged += OnChildPropertyChanged;
+        Renderset.PropertyChanged += OnChildPropertyChanged;
         Runtime.PropertyChanged += OnChildPropertyChanged;
     }
 
@@ -52,6 +56,8 @@ public partial class RenderJobViewModel : ObservableObject
     public JobOutputViewModel Output { get; }
 
     public JobTargetingViewModel Targeting { get; }
+
+    public JobRendersetViewModel Renderset { get; }
 
     public JobRuntimeViewModel Runtime { get; }
 
@@ -90,6 +96,14 @@ public partial class RenderJobViewModel : ObservableObject
     public string FrameModeText => Frames.HasFrameOverride
         ? "Frame settings overridden"
         : "Using blend frame range";
+
+    public bool UsesRenderset => Renderset.UseRenderset;
+
+    public bool IsStandardRenderSettingsEnabled => !Renderset.UseRenderset;
+
+    public string EffectiveOutputDirectory => Renderset.UseRenderset && !string.IsNullOrWhiteSpace(Runtime.LastKnownOutputFolderPath)
+        ? Runtime.LastKnownOutputFolderPath.Trim()
+        : ResolvedOutputDirectory;
 
     public string FrameStartInput
     {
@@ -234,6 +248,9 @@ public partial class RenderJobViewModel : ObservableObject
         job.Targeting.ViewLayerOverrideEnabled = item.ViewLayerOverrideEnabled || !string.IsNullOrWhiteSpace(item.ViewLayerName);
         job.Targeting.Inspection = item.Inspection;
         job.Targeting.InspectionState = item.Inspection is null ? InspectionState.NotInspected : InspectionState.Ready;
+        job.Renderset.UseRenderset = item.UseRenderset;
+        job.Renderset.InitializeSelection(item.SelectedRendersetContextNames, item.UseRenderset);
+        job.Renderset.ApplyInspection(item.Inspection?.Renderset);
 
         job.Output.OutputPathTemplate = NormalizeLegacyOutputPathOverride(item.OutputPathTemplate);
         job.Output.OutputPathOverrideEnabled = job.Output.HasOutputPathOverride;
@@ -250,6 +267,7 @@ public partial class RenderJobViewModel : ObservableObject
         job.Runtime.LastReportedFrameNumber = item.LastReportedFrameNumber;
         job.Runtime.LastCompletedFrameNumber = item.LastCompletedFrameNumber;
         job.Runtime.LastKnownOutputPath = item.LastKnownOutputPath;
+        job.Runtime.LastKnownOutputFolderPath = item.LastKnownOutputFolderPath;
         job.Runtime.LastLogFilePath = item.LastLogFilePath;
         job.Runtime.PreviewStatusText = string.IsNullOrWhiteSpace(item.LastKnownOutputPath)
             ? JobRuntimeViewModel.DefaultPreviewStatusText
@@ -297,12 +315,15 @@ public partial class RenderJobViewModel : ObservableObject
             LastReportedFrameNumber = Runtime.LastReportedFrameNumber,
             LastCompletedFrameNumber = Runtime.LastCompletedFrameNumber,
             LastKnownOutputPath = Runtime.LastKnownOutputPath.Trim(),
+            LastKnownOutputFolderPath = Runtime.LastKnownOutputFolderPath.Trim(),
             LastLogFilePath = Runtime.LastLogFilePath.Trim(),
             LastErrorSummary = Runtime.LastErrorSummary.Trim(),
             LogOutput = Runtime.LogOutput ?? string.Empty,
             LastStartedUtc = Runtime.LastStartedUtc,
             LastCompletedUtc = Runtime.LastCompletedUtc,
             Inspection = Targeting.Inspection,
+            UseRenderset = Renderset.UseRenderset,
+            SelectedRendersetContextNames = Renderset.SelectedContextNames.ToList(),
         };
     }
 
@@ -324,6 +345,7 @@ public partial class RenderJobViewModel : ObservableObject
     public void ApplyInspection(BlendInspectionSnapshot inspection)
     {
         Targeting.ApplyInspection(inspection);
+        Renderset.ApplyInspection(inspection.Renderset);
     }
 
     [ObservableProperty]
@@ -352,6 +374,8 @@ public partial class RenderJobViewModel : ObservableObject
         OnPropertyChanged(nameof(FrameModeText));
         OnPropertyChanged(nameof(HasInspection));
         OnPropertyChanged(nameof(InspectionSummary));
+        OnPropertyChanged(nameof(UsesRenderset));
+        OnPropertyChanged(nameof(IsStandardRenderSettingsEnabled));
         OnPropertyChanged(nameof(OutputDirectoryHint));
         OnPropertyChanged(nameof(OutputNameHint));
         OnPropertyChanged(nameof(OutputPathModeText));
@@ -362,6 +386,7 @@ public partial class RenderJobViewModel : ObservableObject
         OnPropertyChanged(nameof(ResolvedEndFrameText));
         OnPropertyChanged(nameof(FrameEndInput));
         OnPropertyChanged(nameof(ResolvedOutputDirectory));
+        OnPropertyChanged(nameof(EffectiveOutputDirectory));
         OnPropertyChanged(nameof(ResolvedOutputName));
         OnPropertyChanged(nameof(ResolvedOutputPattern));
         OnPropertyChanged(nameof(ResolvedSingleFrameText));

@@ -23,6 +23,12 @@ public sealed class RenderJobValidationService
             result.Errors.Add("Blend file was not found.");
         }
 
+        if (job.UseRenderset)
+        {
+            ValidateRenderset(job, result);
+            return result;
+        }
+
         if (job.Mode == RenderMode.FrameRange)
         {
             ValidateFrameRange(job, result);
@@ -58,6 +64,32 @@ public sealed class RenderJobValidationService
         }
 
         return result;
+    }
+
+    private static void ValidateRenderset(RenderQueueItemViewModel job, RenderJobValidationResult result)
+    {
+        if (job.Inspection?.Renderset is not { HasRenderset: true, Contexts.Count: > 0 })
+        {
+            result.Errors.Add("RenderSet contexts were not loaded. Click Update.");
+            return;
+        }
+
+        if (job.SelectedRendersetContextCount == 0)
+        {
+            result.Errors.Add("Select at least one RenderSet context.");
+            return;
+        }
+
+        var knownNames = new HashSet<string>(
+            job.Inspection.Renderset.Contexts.Select(static context => context.Name),
+            StringComparer.Ordinal);
+        foreach (var selectedName in job.SelectedRendersetContextNames)
+        {
+            if (!knownNames.Contains(selectedName))
+            {
+                result.Errors.Add($"RenderSet context was not found in the blend: {selectedName}");
+            }
+        }
     }
 
     private static void ValidateFrameRange(RenderQueueItemViewModel job, RenderJobValidationResult result)

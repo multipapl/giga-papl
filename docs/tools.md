@@ -21,6 +21,7 @@ Purpose:
 - queue headless Blender renders from multiple `.blend` files
 - inspect each blend file and inherit its default frame range, output, scene, camera, and view layer
 - manage per-job frame, output path/name, Blender executable, scene, camera, and view-layer overrides
+- batch render `.blend` files that are already configured with RenderSet contexts
 - use the global Blender executable path, with an optional per-job executable override
 - start, soft-stop after the current frame, resume, reset, remove, and drag-reorder jobs
 - show job logs, blend metadata reload state, queue progress, per-job progress, and whole-job ETA
@@ -49,7 +50,7 @@ Detail panel:
 - The header shows the blend file name, blend path, inspection status, enabled toggle, `Browse Blend`, and `Retry`.
 - The `Render` block is collapsed by default and contains Blender executable override, frames, output path, and render name.
 - The `Blend File` block is collapsed by default and contains scene, camera, and view-layer targeting.
-- The `RenderSet` block is a reserved empty placeholder.
+- The `RenderSet` block can enable RenderSet mode, list probed contexts, and choose which contexts run for that job.
 - Logs live below the details and can be collapsed.
 
 Override behavior:
@@ -60,6 +61,7 @@ Override behavior:
 - Frame controls default to `FrameRange`; the UI supports `FrameRange` and `SingleFrame`.
 - Output format is inherited from the blend file and is not exposed as a separate override.
 - Blender executable override shows the global Settings path when the job does not have its own path.
+- When `Use RenderSet` is enabled, frame/output/scene/camera/view-layer overrides are ignored and disabled; Blender executable override remains available.
 
 Interaction notes:
 

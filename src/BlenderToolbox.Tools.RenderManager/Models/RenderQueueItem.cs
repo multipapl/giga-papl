@@ -34,6 +34,8 @@ public sealed class RenderQueueItem
 
     public string LastKnownOutputPath { get; set; } = string.Empty;
 
+    public string LastKnownOutputFolderPath { get; set; } = string.Empty;
+
     public string LastLogFilePath { get; set; } = string.Empty;
 
     public int LastReportedFrameNumber { get; set; }
@@ -71,6 +73,10 @@ public sealed class RenderQueueItem
     public RenderJobStatus Status { get; set; } = RenderJobStatus.Pending;
 
     public string Step { get; set; } = "1";
+
+    public List<string> SelectedRendersetContextNames { get; set; } = [];
+
+    public bool UseRenderset { get; set; }
 
     public string ViewLayerName { get; set; } = string.Empty;
 

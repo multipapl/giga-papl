@@ -17,6 +17,8 @@ public sealed class RenderCommandPlan
 
     public required string OverrideScriptPath { get; init; }
 
+    public required bool UsesRenderset { get; init; }
+
     public required bool UsesBlendOutputFallback { get; init; }
 
     public required string WorkingDirectory { get; init; }
@@ -44,12 +46,17 @@ public sealed class RenderCommandPlan
 public sealed class RenderCommandBuilder
 {
     private readonly RenderManagerPaths _paths;
+    private readonly RendersetRenderScriptBuilder _rendersetScriptBuilder;
     private readonly RenderOverrideScriptBuilder _scriptBuilder;
 
-    public RenderCommandBuilder(RenderManagerPaths paths, RenderOverrideScriptBuilder scriptBuilder)
+    public RenderCommandBuilder(
+        RenderManagerPaths paths,
+        RenderOverrideScriptBuilder scriptBuilder,
+        RendersetRenderScriptBuilder? rendersetScriptBuilder = null)
     {
         _paths = paths;
         _scriptBuilder = scriptBuilder;
+        _rendersetScriptBuilder = rendersetScriptBuilder ?? new RendersetRenderScriptBuilder();
     }
 
     public RenderCommandPlan Build(RenderQueueItemViewModel job, string globalBlenderPath, RenderResumePlan resumePlan)
@@ -63,6 +70,11 @@ public sealed class RenderCommandBuilder
             "--background",
             job.BlendFilePath.Trim(),
         };
+
+        if (job.UseRenderset)
+        {
+            return BuildRenderset(job, blenderPath, arguments);
+        }
 
         if (job.HasSceneOverride)
         {
@@ -117,7 +129,34 @@ public sealed class RenderCommandBuilder
             ArgumentsDisplayText = BuildDisplayText(blenderPath, arguments),
             OverrideScriptPath = overrideScriptPath,
             OutputDirectory = job.ResolvedOutputDirectory,
+            UsesRenderset = false,
             UsesBlendOutputFallback = job.UsesOutputFallback,
+            WorkingDirectory = Path.GetDirectoryName(job.BlendFilePath.Trim()) ?? _paths.RuntimeDirectory,
+        };
+    }
+
+    private RenderCommandPlan BuildRenderset(
+        RenderQueueItemViewModel job,
+        string blenderPath,
+        List<string> arguments)
+    {
+        var scriptPath = Path.Combine(_paths.RuntimeDirectory, $"renderset_render_{job.Id}.py");
+        File.WriteAllText(scriptPath, _rendersetScriptBuilder.BuildScript(), Encoding.UTF8);
+
+        arguments.Add("--python");
+        arguments.Add(scriptPath);
+        arguments.Add("--");
+        arguments.Add(_rendersetScriptBuilder.BuildArgumentsJson(job.SelectedRendersetContextNames));
+
+        return new RenderCommandPlan
+        {
+            ExecutablePath = blenderPath,
+            Arguments = arguments,
+            ArgumentsDisplayText = BuildDisplayText(blenderPath, arguments),
+            OverrideScriptPath = scriptPath,
+            OutputDirectory = string.Empty,
+            UsesRenderset = true,
+            UsesBlendOutputFallback = false,
             WorkingDirectory = Path.GetDirectoryName(job.BlendFilePath.Trim()) ?? _paths.RuntimeDirectory,
         };
     }

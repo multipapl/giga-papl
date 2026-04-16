@@ -14,6 +14,10 @@ public sealed class BlendInspectionSnapshot
 
     public int FrameEnd { get; set; }
 
+    public long BlendFileSizeBytes { get; set; }
+
+    public DateTimeOffset? BlendFileLastWriteUtc { get; set; }
+
     public int FrameStart { get; set; }
 
     public int FrameStep { get; set; } = 1;
@@ -25,6 +29,8 @@ public sealed class BlendInspectionSnapshot
     public string RawOutputPath { get; set; } = string.Empty;
 
     public string ResolvedOutputPath { get; set; } = string.Empty;
+
+    public RendersetInspectionSnapshot Renderset { get; set; } = new();
 
     public Dictionary<string, List<string>> SceneCameras { get; set; } = [];
 

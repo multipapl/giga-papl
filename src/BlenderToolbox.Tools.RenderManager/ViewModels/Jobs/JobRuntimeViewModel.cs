@@ -18,7 +18,9 @@ public partial class JobRuntimeViewModel : ObservableObject
     public bool HasPreviewImage => PreviewImageSource is not null;
 
     public string PreviewPathText => string.IsNullOrWhiteSpace(LastKnownOutputPath)
-        ? "Waiting for the first saved frame."
+        ? string.IsNullOrWhiteSpace(LastKnownOutputFolderPath)
+            ? "Waiting for the first saved frame."
+            : LastKnownOutputFolderPath.Trim()
         : LastKnownOutputPath.Trim();
 
     public string LastErrorSummaryText => string.IsNullOrWhiteSpace(LastErrorSummary)
@@ -74,6 +76,7 @@ public partial class JobRuntimeViewModel : ObservableObject
         PreviewImageSource = null;
         PreviewStatusText = DefaultPreviewStatusText;
         LastKnownOutputPath = string.Empty;
+        LastKnownOutputFolderPath = string.Empty;
         LastErrorSummary = string.Empty;
         CompletedFrameRenderSeconds = 0;
         ResumeCompletedFrameCount = 0;
@@ -108,6 +111,9 @@ public partial class JobRuntimeViewModel : ObservableObject
 
     [ObservableProperty]
     private string lastKnownOutputPath = string.Empty;
+
+    [ObservableProperty]
+    private string lastKnownOutputFolderPath = string.Empty;
 
     [ObservableProperty]
     private string lastLogFilePath = string.Empty;
@@ -145,6 +151,11 @@ public partial class JobRuntimeViewModel : ObservableObject
     }
 
     partial void OnLastKnownOutputPathChanged(string value)
+    {
+        OnPropertyChanged(nameof(PreviewPathText));
+    }
+
+    partial void OnLastKnownOutputFolderPathChanged(string value)
     {
         OnPropertyChanged(nameof(PreviewPathText));
     }
