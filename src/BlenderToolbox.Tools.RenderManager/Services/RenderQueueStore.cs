@@ -5,8 +5,6 @@ namespace BlenderToolbox.Tools.RenderManager.Services;
 
 public sealed class RenderQueueStore
 {
-    private const string QueueFileName = "RenderManager\\queue.json";
-
     private readonly IJsonSettingsStore _settingsStore;
 
     public RenderQueueStore(IJsonSettingsStore settingsStore)
@@ -16,11 +14,11 @@ public sealed class RenderQueueStore
 
     public RenderQueueState Load()
     {
-        return _settingsStore.Load<RenderQueueState>(QueueFileName);
+        return _settingsStore.Load<RenderQueueState>(RenderManagerPaths.QueueFileName);
     }
 
     public void Save(RenderQueueState queueState)
     {
-        _settingsStore.Save(QueueFileName, queueState);
+        _settingsStore.Save(RenderManagerPaths.QueueFileName, queueState);
     }
 }

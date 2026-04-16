@@ -5,8 +5,6 @@ namespace BlenderToolbox.Tools.RenderManager.Services;
 
 public sealed class RenderManagerSettingsStore
 {
-    private const string SettingsFileName = "RenderManager\\settings.json";
-
     private readonly IJsonSettingsStore _settingsStore;
 
     public RenderManagerSettingsStore(IJsonSettingsStore settingsStore)
@@ -16,11 +14,11 @@ public sealed class RenderManagerSettingsStore
 
     public RenderManagerSettings Load()
     {
-        return _settingsStore.Load<RenderManagerSettings>(SettingsFileName);
+        return _settingsStore.Load<RenderManagerSettings>(RenderManagerPaths.SettingsFileName);
     }
 
     public void Save(RenderManagerSettings settings)
     {
-        _settingsStore.Save(SettingsFileName, settings);
+        _settingsStore.Save(RenderManagerPaths.SettingsFileName, settings);
     }
 }

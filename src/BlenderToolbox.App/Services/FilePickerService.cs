@@ -20,4 +20,21 @@ public sealed class FilePickerService : IFilePickerService
 
         return dialog.ShowDialog() == true ? dialog.FileName : null;
     }
+
+    public IReadOnlyList<string> PickFiles(string filter, string? initialDirectory = null, string? title = null)
+    {
+        var dialog = new OpenFileDialog
+        {
+            Filter = filter,
+            InitialDirectory = Directory.Exists(initialDirectory) ? initialDirectory : null,
+            Title = title ?? "Select files",
+            Multiselect = true,
+            CheckFileExists = true,
+            CheckPathExists = true,
+        };
+
+        return dialog.ShowDialog() == true
+            ? dialog.FileNames
+            : [];
+    }
 }

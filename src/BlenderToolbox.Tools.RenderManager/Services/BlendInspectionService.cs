@@ -10,15 +10,11 @@ public sealed class BlendInspectionService
 {
     private const string OutputMarker = "BT_RENDER_MANAGER_INSPECT::";
 
-    private readonly string _workingDirectory;
+    private readonly RenderManagerPaths _paths;
 
-    public BlendInspectionService(string applicationName = "BlenderToolbox")
+    public BlendInspectionService(RenderManagerPaths paths)
     {
-        _workingDirectory = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            applicationName,
-            "RenderManager",
-            "inspection");
+        _paths = paths;
     }
 
     public async Task<BlendInspectionSnapshot> InspectAsync(
@@ -36,9 +32,7 @@ public sealed class BlendInspectionService
             throw new InvalidOperationException("Blend file was not found.");
         }
 
-        Directory.CreateDirectory(_workingDirectory);
-
-        var scriptPath = Path.Combine(_workingDirectory, "inspect_blend_defaults.py");
+        var scriptPath = Path.Combine(_paths.InspectionDirectory, "inspect_blend_defaults.py");
         await File.WriteAllTextAsync(scriptPath, BuildScript(), Encoding.UTF8, cancellationToken);
 
         var startInfo = new ProcessStartInfo(blenderExecutablePath)
@@ -47,7 +41,7 @@ public sealed class BlendInspectionService
             CreateNoWindow = true,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
-            WorkingDirectory = Path.GetDirectoryName(blendFilePath) ?? _workingDirectory,
+            WorkingDirectory = Path.GetDirectoryName(blendFilePath) ?? _paths.InspectionDirectory,
         };
 
         startInfo.ArgumentList.Add("--background");
@@ -126,8 +120,18 @@ public sealed class BlendInspectionService
                 for layer_names in scene_view_layer_map.values()
                 for layer_name in layer_names
             })
+            scene_collection_map = {
+                item.name: sorted({collection.name for collection in item.collection.children_recursive})
+                for item in scenes
+            }
+            all_collections = sorted({
+                collection_name
+                for collection_names in scene_collection_map.values()
+                for collection_name in collection_names
+            })
             payload = {
                 "AvailableCameras": all_cameras,
+                "AvailableCollections": all_collections,
                 "AvailableScenes": [item.name for item in scenes],
                 "AvailableViewLayers": all_view_layers,
                 "CameraName": scene.camera.name if scene and scene.camera else "",
@@ -138,6 +142,7 @@ public sealed class BlendInspectionService
                 "RawOutputPath": scene.render.filepath if scene else "",
                 "ResolvedOutputPath": bpy.path.abspath(scene.render.filepath) if scene and scene.render.filepath else "",
                 "SceneCameras": scene_camera_map,
+                "SceneCollections": scene_collection_map,
                 "SceneName": scene.name if scene else "",
                 "SceneViewLayers": scene_view_layer_map,
                 "ViewLayerName": get_default_view_layer(scene),

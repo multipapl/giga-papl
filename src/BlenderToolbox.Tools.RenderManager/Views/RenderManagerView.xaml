@@ -19,169 +19,6 @@
                BasedOn="{StaticResource {x:Type TextBox}}">
             <Setter Property="MinWidth" Value="0" />
         </Style>
-        <Style TargetType="ComboBox">
-            <Setter Property="Background" Value="{DynamicResource InputBackgroundBrush}" />
-            <Setter Property="Foreground" Value="{DynamicResource TextForegroundBrush}" />
-            <Setter Property="BorderBrush" Value="{DynamicResource InputBorderBrush}" />
-            <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="Padding" Value="12,8" />
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="ComboBox">
-                        <Grid>
-                            <Border x:Name="ComboBorder"
-                                    Background="{TemplateBinding Background}"
-                                    BorderBrush="{TemplateBinding BorderBrush}"
-                                    BorderThickness="{TemplateBinding BorderThickness}"
-                                    CornerRadius="{DynamicResource CornerRadiusControl}">
-                                <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="32" />
-                                    </Grid.ColumnDefinitions>
-                                    <ContentPresenter Grid.Column="0"
-                                                      Margin="{TemplateBinding Padding}"
-                                                      VerticalAlignment="Center"
-                                                      HorizontalAlignment="Left"
-                                                      Content="{TemplateBinding SelectionBoxItem}"
-                                                      ContentStringFormat="{TemplateBinding SelectionBoxItemStringFormat}"
-                                                      RecognizesAccessKey="True"
-                                                      TextElement.Foreground="{TemplateBinding Foreground}" />
-                                    <Border Grid.Column="1"
-                                            Background="Transparent">
-                                        <Path Width="10"
-                                              Height="6"
-                                              HorizontalAlignment="Center"
-                                              VerticalAlignment="Center"
-                                              Fill="{TemplateBinding Foreground}"
-                                              Data="M 0 0 L 5 6 L 10 0 Z" />
-                                    </Border>
-                                </Grid>
-                            </Border>
-                            <Popup x:Name="PART_Popup"
-                                   AllowsTransparency="True"
-                                   Focusable="False"
-                                   IsOpen="{TemplateBinding IsDropDownOpen}"
-                                   Placement="Bottom">
-                                <Border Margin="0,4,0,0"
-                                        MinWidth="{Binding ActualWidth, RelativeSource={RelativeSource TemplatedParent}}"
-                                        Background="{DynamicResource InputBackgroundBrush}"
-                                        BorderBrush="{DynamicResource InputBorderBrush}"
-                                        BorderThickness="1"
-                                        CornerRadius="{DynamicResource CornerRadiusControl}">
-                                    <ScrollViewer Margin="2"
-                                                  SnapsToDevicePixels="True">
-                                        <ItemsPresenter KeyboardNavigation.DirectionalNavigation="Contained" />
-                                    </ScrollViewer>
-                                </Border>
-                            </Popup>
-                        </Grid>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsKeyboardFocusWithin" Value="True">
-                                <Setter TargetName="ComboBorder" Property="BorderBrush" Value="{DynamicResource PrimaryBrush}" />
-                            </Trigger>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="ComboBorder" Property="BorderBrush" Value="{DynamicResource SidebarItemSelectedBorderBrush}" />
-                            </Trigger>
-                            <Trigger Property="IsEnabled" Value="False">
-                                <Setter TargetName="ComboBorder" Property="Opacity" Value="0.55" />
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-        <Style TargetType="ComboBoxItem">
-            <Setter Property="Background" Value="{DynamicResource InputBackgroundBrush}" />
-            <Setter Property="Foreground" Value="{DynamicResource TextForegroundBrush}" />
-            <Setter Property="Padding" Value="10,6" />
-            <Style.Triggers>
-                <Trigger Property="IsHighlighted" Value="True">
-                    <Setter Property="Background" Value="{DynamicResource SidebarItemHoverBrush}" />
-                </Trigger>
-                <Trigger Property="IsSelected" Value="True">
-                    <Setter Property="Background" Value="{DynamicResource SidebarItemSelectedBrush}" />
-                </Trigger>
-            </Style.Triggers>
-        </Style>
-        <Style TargetType="ProgressBar">
-            <Setter Property="Minimum" Value="0" />
-            <Setter Property="Maximum" Value="100" />
-            <Setter Property="Height" Value="10" />
-            <Setter Property="Foreground" Value="{DynamicResource PrimaryBrush}" />
-            <Setter Property="Background" Value="{DynamicResource SidebarItemHoverBrush}" />
-        </Style>
-        <Style TargetType="DataGrid">
-            <Setter Property="Background" Value="Transparent" />
-            <Setter Property="BorderThickness" Value="0" />
-            <Setter Property="RowBackground" Value="Transparent" />
-            <Setter Property="AlternatingRowBackground" Value="Transparent" />
-            <Setter Property="HorizontalGridLinesBrush" Value="{DynamicResource PanelBorderBrush}" />
-            <Setter Property="VerticalGridLinesBrush" Value="Transparent" />
-            <Setter Property="Foreground" Value="{DynamicResource TextForegroundBrush}" />
-        </Style>
-        <Style TargetType="DataGridColumnHeader">
-            <Setter Property="Background" Value="{DynamicResource SidebarItemBackgroundBrush}" />
-            <Setter Property="Foreground" Value="{DynamicResource MutedForegroundBrush}" />
-            <Setter Property="FontWeight" Value="SemiBold" />
-            <Setter Property="Padding" Value="8,8" />
-            <Setter Property="BorderBrush" Value="{DynamicResource PanelBorderBrush}" />
-            <Setter Property="BorderThickness" Value="0,0,0,1" />
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="DataGridColumnHeader">
-                        <Border Background="{TemplateBinding Background}"
-                                BorderBrush="{TemplateBinding BorderBrush}"
-                                BorderThickness="{TemplateBinding BorderThickness}"
-                                Padding="{TemplateBinding Padding}">
-                            <ContentPresenter VerticalAlignment="Center" />
-                        </Border>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-        <Style TargetType="DataGridRow">
-            <Setter Property="Background" Value="Transparent" />
-            <Setter Property="BorderBrush" Value="{DynamicResource PanelBorderBrush}" />
-            <Setter Property="BorderThickness" Value="0,0,0,1" />
-            <Style.Triggers>
-                <Trigger Property="IsSelected" Value="True">
-                    <Setter Property="Background" Value="{DynamicResource SidebarItemSelectedBrush}" />
-                </Trigger>
-                <MultiTrigger>
-                    <MultiTrigger.Conditions>
-                        <Condition Property="IsMouseOver" Value="True" />
-                        <Condition Property="IsSelected" Value="False" />
-                    </MultiTrigger.Conditions>
-                    <Setter Property="Background" Value="{DynamicResource SidebarItemHoverBrush}" />
-                </MultiTrigger>
-                <DataTrigger Binding="{Binding IsEnabled}" Value="False">
-                    <Setter Property="Opacity" Value="0.45" />
-                </DataTrigger>
-            </Style.Triggers>
-        </Style>
-        <Style TargetType="DataGridCell">
-            <Setter Property="BorderThickness" Value="0" />
-            <Setter Property="Background" Value="Transparent" />
-            <Setter Property="Foreground" Value="{DynamicResource TextForegroundBrush}" />
-            <Setter Property="Padding" Value="8,6" />
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="DataGridCell">
-                        <Border Background="{TemplateBinding Background}"
-                                Padding="{TemplateBinding Padding}">
-                            <ContentPresenter VerticalAlignment="Center" />
-                        </Border>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-            <Style.Triggers>
-                <Trigger Property="IsSelected" Value="True">
-                    <Setter Property="Background" Value="Transparent" />
-                    <Setter Property="Foreground" Value="{DynamicResource TextForegroundBrush}" />
-                </Trigger>
-            </Style.Triggers>
-        </Style>
     </UserControl.Resources>
 
     <Grid>
@@ -312,6 +149,11 @@
                                         Command="{Binding StartQueueCommand}"
                                         Content="Start" />
                                 <Button Margin="0,0,8,8"
+                                        MinWidth="108"
+                                        Style="{StaticResource SecondaryButtonStyle}"
+                                        Command="{Binding StartSelectedJobCommand}"
+                                        Content="Render Selected" />
+                                <Button Margin="0,0,8,8"
                                         MinWidth="92"
                                         Style="{StaticResource DangerButtonStyle}"
                                         Command="{Binding StopQueueCommand}"
@@ -342,6 +184,18 @@
                                     Style="{StaticResource SecondaryButtonStyle}"
                                     Command="{Binding MoveSelectedJobDownCommand}"
                                     Content="Move Down" />
+                            <Button Margin="0,0,8,8"
+                                    Style="{StaticResource SecondaryButtonStyle}"
+                                    Command="{Binding StopAfterCurrentFrameCommand}"
+                                    Content="Stop After Frame" />
+                            <Button Margin="0,0,8,8"
+                                    Style="{StaticResource SecondaryButtonStyle}"
+                                    Command="{Binding StopAfterCurrentJobCommand}"
+                                    Content="Stop After Job" />
+                            <Button Margin="0,0,8,8"
+                                    Style="{StaticResource SecondaryButtonStyle}"
+                                    Command="{Binding AddEmptyJobCommand}"
+                                    Content="Add Empty" />
                         </WrapPanel>
                     </StackPanel>
 
@@ -437,6 +291,7 @@
                                     <ColumnDefinition Width="Auto" />
                                     <ColumnDefinition Width="Auto" />
                                     <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
 
                                 <TextBox Grid.Column="0"
@@ -454,17 +309,18 @@
                                         Command="{Binding DataContext.BrowseSelectedBlendCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                         Content="Browse Blend" />
                                 <Button Grid.Column="3"
+                                        Margin="0,0,8,0"
                                         Style="{StaticResource SecondaryButtonStyle}"
                                         Command="{Binding DataContext.ResetSelectedJobCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                         Content="Reset Progress" />
+                                <Button Grid.Column="4"
+                                        Style="{StaticResource SecondaryButtonStyle}"
+                                        Command="{Binding DataContext.RetrySelectedJobCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                        Content="Retry" />
                             </Grid>
 
                             <Border Margin="0,14,0,0"
-                                    Padding="14"
-                                    Background="{DynamicResource SidebarItemBackgroundBrush}"
-                                    BorderBrush="{DynamicResource PanelBorderBrush}"
-                                    BorderThickness="1"
-                                    CornerRadius="12">
+                                    Style="{StaticResource InsetPanelCardStyle}">
                                 <Grid>
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="*" />
@@ -489,11 +345,7 @@
                             </Border>
 
                             <Border Margin="0,18,0,0"
-                                    Padding="14"
-                                    Background="{DynamicResource SidebarItemBackgroundBrush}"
-                                    BorderBrush="{DynamicResource PanelBorderBrush}"
-                                    BorderThickness="1"
-                                    CornerRadius="12">
+                                    Style="{StaticResource InsetPanelCardStyle}">
                                 <StackPanel>
                                     <DockPanel>
                                         <TextBlock DockPanel.Dock="Left"
@@ -552,15 +404,66 @@
                                                Style="{StaticResource HelperTextStyle}"
                                                Text="{Binding PreviewPathText}"
                                                TextWrapping="Wrap" />
+                                    <WrapPanel Margin="0,10,0,0">
+                                        <Button Margin="0,0,8,8"
+                                                Style="{StaticResource SecondaryButtonStyle}"
+                                                Command="{Binding DataContext.OpenSelectedOutputFileCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                Content="Open Frame" />
+                                        <Button Margin="0,0,8,8"
+                                                Style="{StaticResource SecondaryButtonStyle}"
+                                                Command="{Binding DataContext.OpenSelectedOutputFolderCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                Content="Open Folder" />
+                                    </WrapPanel>
                                 </StackPanel>
                             </Border>
 
                             <Border Margin="0,18,0,0"
-                                    Padding="14"
-                                    Background="{DynamicResource SidebarItemBackgroundBrush}"
-                                    BorderBrush="{DynamicResource PanelBorderBrush}"
-                                    BorderThickness="1"
-                                    CornerRadius="12">
+                                    Style="{StaticResource InsetPanelCardStyle}">
+                                <StackPanel>
+                                    <TextBlock Style="{StaticResource SectionTitleTextStyle}"
+                                               Text="Blender" />
+
+                                    <TextBlock Margin="0,10,0,0"
+                                               Style="{StaticResource FieldLabelTextStyle}"
+                                               Text="Executable override" />
+                                    <Grid Margin="0,6,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="8" />
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="8" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBox Grid.Column="0"
+                                                 Style="{StaticResource QueueTextBoxStyle}"
+                                                 Text="{Binding BlenderExecutablePath, UpdateSourceTrigger=PropertyChanged}" />
+                                        <Button Grid.Column="2"
+                                                Style="{StaticResource SecondaryButtonStyle}"
+                                                Command="{Binding DataContext.BrowseSelectedBlenderCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                Content="Browse" />
+                                        <Button Grid.Column="4"
+                                                Style="{StaticResource SecondaryButtonStyle}"
+                                                Command="{Binding DataContext.UseDefaultBlenderForSelectedJobCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                Content="Use Default" />
+                                    </Grid>
+                                    <TextBlock Margin="0,6,0,0"
+                                               Style="{StaticResource HelperTextStyle}"
+                                               Text="Leave empty to inherit the global Blender executable from the header." />
+
+                                    <TextBlock Margin="0,12,0,0"
+                                               Style="{StaticResource FieldLabelTextStyle}"
+                                               Text="Device mode" />
+                                    <ComboBox Margin="0,6,0,0"
+                                              ItemsSource="{Binding DataContext.DeviceModes, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                              SelectedItem="{Binding DeviceMode, Mode=TwoWay}" />
+                                    <TextBlock Margin="0,6,0,0"
+                                               Style="{StaticResource HelperTextStyle}"
+                                               Text="Use ForceCpu when you want a predictable CPU-only run for the selected job." />
+                                </StackPanel>
+                            </Border>
+
+                            <Border Margin="0,18,0,0"
+                                    Style="{StaticResource InsetPanelCardStyle}">
                                 <StackPanel>
                                     <TextBlock Style="{StaticResource SectionTitleTextStyle}"
                                                Text="Mode" />
@@ -639,11 +542,7 @@
                             </Border>
 
                             <Border Margin="0,18,0,0"
-                                    Padding="14"
-                                    Background="{DynamicResource SidebarItemBackgroundBrush}"
-                                    BorderBrush="{DynamicResource PanelBorderBrush}"
-                                    BorderThickness="1"
-                                    CornerRadius="12">
+                                    Style="{StaticResource InsetPanelCardStyle}">
                                 <StackPanel>
                                     <TextBlock Style="{StaticResource SectionTitleTextStyle}"
                                                Text="Render Output" />
@@ -717,11 +616,7 @@
                             </Border>
 
                             <Border Margin="0,18,0,0"
-                                    Padding="14"
-                                    Background="{DynamicResource SidebarItemBackgroundBrush}"
-                                    BorderBrush="{DynamicResource PanelBorderBrush}"
-                                    BorderThickness="1"
-                                    CornerRadius="12">
+                                    Style="{StaticResource InsetPanelCardStyle}">
                                 <StackPanel>
                                     <TextBlock Style="{StaticResource SectionTitleTextStyle}"
                                                Text="Scene Settings" />
@@ -791,6 +686,64 @@
                                                        Text="{Binding ViewLayerHint}" />
                                         </StackPanel>
                                     </Grid>
+                                </StackPanel>
+                            </Border>
+
+                            <Border Margin="0,18,0,0"
+                                    Style="{StaticResource InsetPanelCardStyle}">
+                                <StackPanel>
+                                    <TextBlock Style="{StaticResource SectionTitleTextStyle}"
+                                               Text="Collections &amp; Args" />
+
+                                    <Grid Margin="0,10,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="8" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <CheckBox Grid.Column="0"
+                                                  VerticalAlignment="Top"
+                                                  IsChecked="{Binding HasCollectionOverride, Mode=TwoWay}" />
+                                        <StackPanel Grid.Column="2">
+                                            <TextBlock Style="{StaticResource FieldLabelTextStyle}"
+                                                       Text="Excluded collections" />
+                                            <TextBox Margin="0,6,0,0"
+                                                     AcceptsReturn="True"
+                                                     MinHeight="92"
+                                                     IsEnabled="{Binding HasCollectionOverride}"
+                                                     Style="{StaticResource QueueTextBoxStyle}"
+                                                     Text="{Binding CollectionOverrides, UpdateSourceTrigger=PropertyChanged}"
+                                                     TextWrapping="Wrap"
+                                                     VerticalContentAlignment="Top" />
+                                            <TextBlock Margin="0,6,0,0"
+                                                       Style="{StaticResource HelperTextStyle}"
+                                                       Text="{Binding CollectionHint}" />
+                                        </StackPanel>
+                                    </Grid>
+
+                                    <TextBlock Margin="0,12,0,0"
+                                               Style="{StaticResource FieldLabelTextStyle}"
+                                               Text="Extra Blender args" />
+                                    <TextBox Margin="0,6,0,0"
+                                             Style="{StaticResource QueueTextBoxStyle}"
+                                             Text="{Binding ExtraArgs, UpdateSourceTrigger=PropertyChanged}" />
+                                    <TextBlock Margin="0,6,0,0"
+                                               Style="{StaticResource HelperTextStyle}"
+                                               Text="Optional advanced flags appended to the Blender command line for this job only." />
+                                </StackPanel>
+                            </Border>
+
+                            <Border Margin="0,18,0,0"
+                                    Style="{StaticResource InsetPanelCardStyle}">
+                                <StackPanel>
+                                    <TextBlock Style="{StaticResource SectionTitleTextStyle}"
+                                               Text="Diagnostics" />
+                                    <TextBlock Margin="0,10,0,0"
+                                               Style="{StaticResource HelperTextStyle}"
+                                               Text="{Binding LastErrorSummaryText}" />
+                                    <TextBlock Margin="0,10,0,0"
+                                               Style="{StaticResource HelperTextStyle}"
+                                               Text="{Binding ResolvedOutputPattern}" />
                                 </StackPanel>
                             </Border>
                         </StackPanel>

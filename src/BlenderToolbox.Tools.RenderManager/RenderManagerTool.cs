@@ -11,11 +11,18 @@ public sealed class RenderManagerTool : IToolDefinition, IStatefulTool
 
     public RenderManagerTool(IJsonSettingsStore settingsStore, IFilePickerService filePickerService)
     {
+        var paths = new RenderManagerPaths();
+        var overrideScriptBuilder = new RenderOverrideScriptBuilder();
+
         _viewModel = new RenderManagerViewModel(
-            new BlendInspectionService(),
+            new BlendInspectionService(paths),
+            new RenderCommandBuilder(paths, overrideScriptBuilder),
             new RenderPreviewLoader(),
             new RenderManagerSettingsStore(settingsStore),
             new RenderQueueStore(settingsStore),
+            new RenderJobValidationService(),
+            new RenderJobLogWriter(),
+            paths,
             filePickerService);
 
         View = new RenderManagerView
@@ -24,7 +31,7 @@ public sealed class RenderManagerTool : IToolDefinition, IStatefulTool
         };
     }
 
-    public string Description => "Build and persist a local Blender render queue before wiring real inspection and execution.";
+    public string Description => "Queue, inspect, and run local Blender renders with per-job overrides, logs, and resume support.";
 
     public string DisplayName => "Render Manager";
 

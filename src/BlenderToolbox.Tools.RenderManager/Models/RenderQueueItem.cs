@@ -12,7 +12,11 @@ public sealed class RenderQueueItem
 
     public string CollectionOverrides { get; set; } = string.Empty;
 
+    public bool CollectionOverrideEnabled { get; set; }
+
     public double CompletedFrameRenderSeconds { get; set; }
+
+    public RenderDeviceMode DeviceMode { get; set; } = RenderDeviceMode.Default;
 
     public string ElapsedText { get; set; } = string.Empty;
 
@@ -37,6 +41,8 @@ public sealed class RenderQueueItem
     public string LastErrorSummary { get; set; } = string.Empty;
 
     public string LastKnownOutputPath { get; set; } = string.Empty;
+
+    public string LastLogFilePath { get; set; } = string.Empty;
 
     public int LastReportedFrameNumber { get; set; }
 

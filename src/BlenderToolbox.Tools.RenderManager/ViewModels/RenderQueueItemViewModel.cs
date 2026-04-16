@@ -1,6 +1,7 @@
 using System.IO;
 using System.Windows.Media.Imaging;
 using BlenderToolbox.Tools.RenderManager.Models;
+using BlenderToolbox.Tools.RenderManager.Services;
 using CommunityToolkit.Mvvm.ComponentModel;
 
 namespace BlenderToolbox.Tools.RenderManager.ViewModels;
@@ -9,6 +10,7 @@ public partial class RenderQueueItemViewModel : ObservableObject
 {
     private const string DefaultPreviewStatusText = "Preview will appear after the first saved frame.";
     private const string StoredPreviewStatusText = "Preview can be reloaded from the last saved frame.";
+    private static readonly RenderOutputTemplateService OutputTemplateService = new();
 
     public RenderQueueItemViewModel()
     {
@@ -34,7 +36,9 @@ public partial class RenderQueueItemViewModel : ObservableObject
         ViewLayerName = item.ViewLayerName;
         ViewLayerOverrideEnabled = item.ViewLayerOverrideEnabled || !string.IsNullOrWhiteSpace(item.ViewLayerName);
         CollectionOverrides = item.CollectionOverrides;
+        CollectionOverrideEnabled = item.CollectionOverrideEnabled || !string.IsNullOrWhiteSpace(item.CollectionOverrides);
         CompletedFrameRenderSeconds = item.CompletedFrameRenderSeconds;
+        DeviceMode = item.DeviceMode;
         OutputPathTemplate = NormalizeLegacyOutputPathOverride(item.OutputPathTemplate);
         OutputPathOverrideEnabled = item.OutputPathOverrideEnabled || !string.IsNullOrWhiteSpace(OutputPathTemplate);
         OutputFileNameTemplate = NormalizeLegacyOutputNameOverride(item.OutputFileNameTemplate);
@@ -51,6 +55,7 @@ public partial class RenderQueueItemViewModel : ObservableObject
         LastReportedFrameNumber = item.LastReportedFrameNumber;
         LastCompletedFrameNumber = item.LastCompletedFrameNumber;
         LastKnownOutputPath = item.LastKnownOutputPath;
+        LastLogFilePath = item.LastLogFilePath;
         PreviewStatusText = string.IsNullOrWhiteSpace(item.LastKnownOutputPath)
             ? DefaultPreviewStatusText
             : StoredPreviewStatusText;
@@ -128,6 +133,26 @@ public partial class RenderQueueItemViewModel : ObservableObject
 
     public bool HasInspection => Inspection is not null;
 
+    public bool HasCollectionOverride
+    {
+        get => CollectionOverrideEnabled;
+        set
+        {
+            if (value == HasCollectionOverride)
+            {
+                return;
+            }
+
+            CollectionOverrideEnabled = value;
+            if (!value)
+            {
+                CollectionOverrides = string.Empty;
+            }
+
+            OnPropertyChanged(nameof(HasCollectionOverride));
+        }
+    }
+
     public string InspectionSummary
     {
         get
@@ -197,26 +222,12 @@ public partial class RenderQueueItemViewModel : ObservableObject
 
     public string OutputDirectoryHint
     {
-        get
-        {
-            var defaults = ResolveBlendOutputDefaults();
-            var source = defaults.UsesFallback
-                ? "Empty = fallback"
-                : "Empty = from blend";
-            return $"{source}: {defaults.Directory}";
-        }
+        get => OutputTemplateService.BuildOriginalOutputDirectoryHint(BuildTemplateContext());
     }
 
     public string OutputNameHint
     {
-        get
-        {
-            var defaults = ResolveBlendOutputDefaults();
-            var source = defaults.UsesFallback
-                ? "Empty = fallback"
-                : "Empty = from blend";
-            return $"{source}: {defaults.Name}";
-        }
+        get => OutputTemplateService.BuildOriginalOutputNameHint(BuildTemplateContext());
     }
 
     public string OutputFormatHint => string.IsNullOrWhiteSpace(Inspection?.OutputFormat)
@@ -233,40 +244,21 @@ public partial class RenderQueueItemViewModel : ObservableObject
 
     public string ResolvedCameraName => ResolveOverride(CameraName, Inspection?.CameraName);
 
-    public string ResolvedOutputDirectory => string.IsNullOrWhiteSpace(OutputPathTemplate)
-        ? ResolveBlendOutputDefaults().Directory
-        : OutputPathTemplate.Trim();
+    public string ResolvedOutputDirectory => OutputTemplateService.ResolveOutputDirectory(BuildTemplateContext());
 
     public string ResolvedOutputFormat => ResolveOverride(OutputFormat, Inspection?.OutputFormat);
 
-    public string ResolvedOutputName => string.IsNullOrWhiteSpace(OutputFileNameTemplate)
-        ? ResolveBlendOutputDefaults().Name
-        : OutputFileNameTemplate.Trim();
+    public string ResolvedOutputName => OutputTemplateService.ResolveOutputName(BuildTemplateContext());
 
-    public string ResolvedOutputPattern
-    {
-        get
-        {
-            var directory = ResolvedOutputDirectory;
-            var name = ResolvedOutputName;
-            if (string.IsNullOrWhiteSpace(directory) || string.IsNullOrWhiteSpace(name))
-            {
-                return string.Empty;
-            }
+    public string ResolvedOutputPattern => OutputTemplateService.BuildOutputPattern(BuildTemplateContext());
 
-            var normalizedName = name.Trim();
-            if (!normalizedName.Contains('#'))
-            {
-                normalizedName = normalizedName.EndsWith("_", StringComparison.Ordinal) ||
-                                 normalizedName.EndsWith("-", StringComparison.Ordinal) ||
-                                 normalizedName.EndsWith(".", StringComparison.Ordinal)
-                    ? $"{normalizedName}####"
-                    : $"{normalizedName}_####";
-            }
+    public string CollectionHint => string.IsNullOrWhiteSpace(Inspection?.SceneName)
+        ? "Exclude collection names separated by commas or new lines."
+        : $"Exclude collections for {ResolvedSceneName}. Separate names with commas or new lines.";
 
-            return Path.Combine(directory, normalizedName);
-        }
-    }
+    public string LastErrorSummaryText => string.IsNullOrWhiteSpace(LastErrorSummary)
+        ? "No validation or runtime errors recorded."
+        : LastErrorSummary.Trim();
 
     public string ResolvedSceneName => ResolveOverride(SceneName, Inspection?.SceneName);
 
@@ -326,7 +318,23 @@ public partial class RenderQueueItemViewModel : ObservableObject
 
     public string ViewLayerHint => BuildInheritedHint(Inspection?.ViewLayerName, "view layer");
 
-    public bool UsesOutputFallback => ResolveBlendOutputDefaults().UsesFallback;
+    public bool UsesOutputFallback => OutputTemplateService.UsesFallback(BuildTemplateContext());
+
+    public string ResolvedEndFrameText => string.IsNullOrWhiteSpace(EndFrame)
+        ? (Inspection is { FrameEnd: > 0 } inspection ? inspection.FrameEnd.ToString() : string.Empty)
+        : EndFrame.Trim();
+
+    public string ResolvedSingleFrameText => string.IsNullOrWhiteSpace(SingleFrame)
+        ? (Inspection is { FrameStart: > 0 } inspection ? inspection.FrameStart.ToString() : "1")
+        : SingleFrame.Trim();
+
+    public string ResolvedStartFrameText => string.IsNullOrWhiteSpace(StartFrame)
+        ? (Inspection is { FrameStart: > 0 } inspection ? inspection.FrameStart.ToString() : string.Empty)
+        : StartFrame.Trim();
+
+    public string ResolvedStepText => string.IsNullOrWhiteSpace(Step)
+        ? (Inspection is { FrameStep: > 0 } inspection ? inspection.FrameStep.ToString() : "1")
+        : Step.Trim();
 
     public static RenderQueueItemViewModel CreateNew(string blendFilePath)
     {
@@ -411,7 +419,9 @@ public partial class RenderQueueItemViewModel : ObservableObject
             ViewLayerName = ViewLayerName.Trim(),
             ViewLayerOverrideEnabled = ViewLayerOverrideEnabled,
             CollectionOverrides = CollectionOverrides.Trim(),
+            CollectionOverrideEnabled = CollectionOverrideEnabled,
             CompletedFrameRenderSeconds = CompletedFrameRenderSeconds,
+            DeviceMode = DeviceMode,
             OutputPathTemplate = OutputPathTemplate.Trim(),
             OutputPathOverrideEnabled = OutputPathOverrideEnabled,
             OutputFileNameTemplate = OutputFileNameTemplate.Trim(),
@@ -428,6 +438,7 @@ public partial class RenderQueueItemViewModel : ObservableObject
             LastReportedFrameNumber = LastReportedFrameNumber,
             LastCompletedFrameNumber = LastCompletedFrameNumber,
             LastKnownOutputPath = LastKnownOutputPath.Trim(),
+            LastLogFilePath = LastLogFilePath.Trim(),
             LastErrorSummary = LastErrorSummary.Trim(),
             LogOutput = LogOutput ?? string.Empty,
             LastStartedUtc = LastStartedUtc,
@@ -452,7 +463,13 @@ public partial class RenderQueueItemViewModel : ObservableObject
     private string collectionOverrides = string.Empty;
 
     [ObservableProperty]
+    private bool collectionOverrideEnabled;
+
+    [ObservableProperty]
     private double completedFrameRenderSeconds;
+
+    [ObservableProperty]
+    private RenderDeviceMode deviceMode = RenderDeviceMode.Default;
 
     [ObservableProperty]
     private string elapsedText = string.Empty;
@@ -491,6 +508,9 @@ public partial class RenderQueueItemViewModel : ObservableObject
     private string lastKnownOutputPath = string.Empty;
 
     [ObservableProperty]
+    private string lastLogFilePath = string.Empty;
+
+    [ObservableProperty]
     private int lastReportedFrameNumber;
 
     [ObservableProperty]
@@ -504,6 +524,9 @@ public partial class RenderQueueItemViewModel : ObservableObject
 
     [ObservableProperty]
     private string name = string.Empty;
+
+    [ObservableProperty]
+    private int queueIndex = 1;
 
     [ObservableProperty]
     private BitmapSource? previewImageSource;
@@ -583,6 +606,27 @@ public partial class RenderQueueItemViewModel : ObservableObject
 
     public IReadOnlyList<string> AvailableSceneNames => Inspection?.AvailableScenes ?? [];
 
+    public IReadOnlyList<string> AvailableCollectionNames
+    {
+        get
+        {
+            if (Inspection?.SceneCollections is not { Count: > 0 } sceneCollections)
+            {
+                return Inspection?.AvailableCollections ?? [];
+            }
+
+            var sceneKey = ResolvedSceneName;
+            if (!string.IsNullOrWhiteSpace(sceneKey) &&
+                sceneCollections.TryGetValue(sceneKey, out var collections) &&
+                collections.Count > 0)
+            {
+                return collections;
+            }
+
+            return Inspection?.AvailableCollections ?? [];
+        }
+    }
+
     public IReadOnlyList<string> AvailableViewLayerNames
     {
         get
@@ -616,6 +660,21 @@ public partial class RenderQueueItemViewModel : ObservableObject
         NotifyTargetingChanged();
     }
 
+    partial void OnCollectionOverridesChanged(string value)
+    {
+        OnPropertyChanged(nameof(HasCollectionOverride));
+    }
+
+    partial void OnCollectionOverrideEnabledChanged(bool value)
+    {
+        OnPropertyChanged(nameof(HasCollectionOverride));
+    }
+
+    partial void OnDeviceModeChanged(RenderDeviceMode value)
+    {
+        NotifyResolvedSettingsChanged();
+    }
+
     partial void OnEndFrameChanged(string value)
     {
         OnPropertyChanged(nameof(FrameSummary));
@@ -624,6 +683,7 @@ public partial class RenderQueueItemViewModel : ObservableObject
     partial void OnInspectionChanged(BlendInspectionSnapshot? value)
     {
         OnPropertyChanged(nameof(AvailableCameraNames));
+        OnPropertyChanged(nameof(AvailableCollectionNames));
         OnPropertyChanged(nameof(AvailableSceneNames));
         OnPropertyChanged(nameof(AvailableViewLayerNames));
         NotifyResolvedSettingsChanged();
@@ -641,6 +701,11 @@ public partial class RenderQueueItemViewModel : ObservableObject
     partial void OnNameChanged(string value)
     {
         OnPropertyChanged(nameof(EffectiveName));
+    }
+
+    partial void OnQueueIndexChanged(int value)
+    {
+        NotifyResolvedSettingsChanged();
     }
 
     partial void OnOutputFileNameTemplateChanged(string value)
@@ -669,6 +734,11 @@ public partial class RenderQueueItemViewModel : ObservableObject
     partial void OnLastKnownOutputPathChanged(string value)
     {
         OnPropertyChanged(nameof(PreviewPathText));
+    }
+
+    partial void OnLastErrorSummaryChanged(string value)
+    {
+        OnPropertyChanged(nameof(LastErrorSummaryText));
     }
 
     partial void OnPreviewImageSourceChanged(BitmapSource? value)
@@ -714,9 +784,12 @@ public partial class RenderQueueItemViewModel : ObservableObject
     {
         OnPropertyChanged(nameof(BlendFrameSummary));
         OnPropertyChanged(nameof(AvailableCameraNames));
+        OnPropertyChanged(nameof(AvailableCollectionNames));
         OnPropertyChanged(nameof(AvailableViewLayerNames));
         OnPropertyChanged(nameof(CameraHint));
+        OnPropertyChanged(nameof(CollectionHint));
         OnPropertyChanged(nameof(HasCameraOverride));
+        OnPropertyChanged(nameof(HasCollectionOverride));
         OnPropertyChanged(nameof(HasFrameOverride));
         OnPropertyChanged(nameof(HasInspection));
         OnPropertyChanged(nameof(HasOutputFormatOverride));
@@ -729,11 +802,15 @@ public partial class RenderQueueItemViewModel : ObservableObject
         OnPropertyChanged(nameof(OutputFormatHint));
         OnPropertyChanged(nameof(OutputNameHint));
         OnPropertyChanged(nameof(ResolvedCameraName));
+        OnPropertyChanged(nameof(ResolvedEndFrameText));
         OnPropertyChanged(nameof(ResolvedOutputDirectory));
         OnPropertyChanged(nameof(ResolvedOutputFormat));
         OnPropertyChanged(nameof(ResolvedOutputName));
         OnPropertyChanged(nameof(ResolvedOutputPattern));
         OnPropertyChanged(nameof(ResolvedSceneName));
+        OnPropertyChanged(nameof(ResolvedSingleFrameText));
+        OnPropertyChanged(nameof(ResolvedStartFrameText));
+        OnPropertyChanged(nameof(ResolvedStepText));
         OnPropertyChanged(nameof(ResolvedViewLayerName));
         OnPropertyChanged(nameof(SceneHint));
         OnPropertyChanged(nameof(UsesOutputFallback));
@@ -746,60 +823,21 @@ public partial class RenderQueueItemViewModel : ObservableObject
         if (sceneSelectionChanged)
         {
             OnPropertyChanged(nameof(AvailableCameraNames));
+            OnPropertyChanged(nameof(AvailableCollectionNames));
             OnPropertyChanged(nameof(AvailableViewLayerNames));
         }
 
         OnPropertyChanged(nameof(CameraHint));
+        OnPropertyChanged(nameof(OutputDirectoryHint));
+        OnPropertyChanged(nameof(OutputNameHint));
         OnPropertyChanged(nameof(ResolvedCameraName));
+        OnPropertyChanged(nameof(ResolvedOutputDirectory));
+        OnPropertyChanged(nameof(ResolvedOutputName));
+        OnPropertyChanged(nameof(ResolvedOutputPattern));
         OnPropertyChanged(nameof(ResolvedSceneName));
         OnPropertyChanged(nameof(ResolvedViewLayerName));
         OnPropertyChanged(nameof(SceneHint));
         OnPropertyChanged(nameof(ViewLayerHint));
-    }
-
-    private OutputDefaults ResolveBlendOutputDefaults()
-    {
-        if (Inspection is null || LooksLikeDefaultBlendOutput(Inspection.RawOutputPath))
-        {
-            return BuildFallbackOutputDefaults();
-        }
-
-        var resolvedOutputPath = Inspection.ResolvedOutputPath.Trim();
-        if (string.IsNullOrWhiteSpace(resolvedOutputPath))
-        {
-            return BuildFallbackOutputDefaults();
-        }
-
-        if (EndsWithDirectorySeparator(Inspection.RawOutputPath) || EndsWithDirectorySeparator(Inspection.ResolvedOutputPath))
-        {
-            return new OutputDefaults(
-                resolvedOutputPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
-                BlendFileName,
-                UsesFallback: false);
-        }
-
-        var directory = Path.GetDirectoryName(resolvedOutputPath) ?? string.Empty;
-        var name = StripOutputName(Path.GetFileName(resolvedOutputPath));
-
-        if (string.IsNullOrWhiteSpace(directory))
-        {
-            return BuildFallbackOutputDefaults();
-        }
-
-        if (string.IsNullOrWhiteSpace(name))
-        {
-            name = BlendFileName;
-        }
-
-        return new OutputDefaults(directory, name, UsesFallback: false);
-    }
-
-    private OutputDefaults BuildFallbackOutputDefaults()
-    {
-        var directory = string.IsNullOrWhiteSpace(BlendDirectory)
-            ? string.Empty
-            : Path.Combine(BlendDirectory, "renders");
-        return new OutputDefaults(directory, BlendFileName, UsesFallback: true);
     }
 
     private static string DisplayValue(string? value, string fallback = "Auto")
@@ -807,30 +845,11 @@ public partial class RenderQueueItemViewModel : ObservableObject
         return string.IsNullOrWhiteSpace(value) ? fallback : value.Trim();
     }
 
-    private static bool EndsWithDirectorySeparator(string value)
-    {
-        return !string.IsNullOrWhiteSpace(value) &&
-               (value.EndsWith(Path.DirectorySeparatorChar) || value.EndsWith(Path.AltDirectorySeparatorChar));
-    }
-
     private static RenderJobStatus GetInitialStatus(string? blendFilePath)
     {
         return string.IsNullOrWhiteSpace(blendFilePath)
             ? RenderJobStatus.Pending
             : RenderJobStatus.Ready;
-    }
-
-    private static bool LooksLikeDefaultBlendOutput(string? rawOutputPath)
-    {
-        var normalized = (rawOutputPath ?? string.Empty)
-            .Trim()
-            .Replace('\\', '/')
-            .TrimEnd('/');
-
-        return string.IsNullOrWhiteSpace(normalized) ||
-               string.Equals(normalized, "/tmp", StringComparison.OrdinalIgnoreCase) ||
-               string.Equals(normalized, "//tmp", StringComparison.OrdinalIgnoreCase) ||
-               string.Equals(normalized, "//", StringComparison.OrdinalIgnoreCase);
     }
 
     private static string NormalizeLegacyOutputNameOverride(string value)
@@ -854,17 +873,22 @@ public partial class RenderQueueItemViewModel : ObservableObject
             : overrideValue.Trim();
     }
 
-    private static string StripOutputName(string fileName)
-    {
-        var nameWithoutExtension = Path.GetFileNameWithoutExtension(fileName ?? string.Empty);
-        var trimmedHashes = nameWithoutExtension.Replace("#", string.Empty, StringComparison.Ordinal);
-        return trimmedHashes.Trim();
-    }
-
     private static string BuildLifecycleLog(string message)
     {
         return $"[{DateTimeOffset.Now:yyyy-MM-dd HH:mm:ss}] {message}";
     }
 
-    private readonly record struct OutputDefaults(string Directory, string Name, bool UsesFallback);
+    private RenderQueueItemViewModelLike BuildTemplateContext()
+    {
+        return new RenderQueueItemViewModelLike(
+            BlendDirectory,
+            BlendFileName,
+            OutputPathTemplate,
+            OutputFileNameTemplate,
+            ResolvedSceneName,
+            ResolvedCameraName,
+            ResolvedViewLayerName,
+            QueueIndex,
+            Inspection);
+    }
 }

@@ -11,6 +11,7 @@ Standalone Windows desktop toolbox for small production-oriented utilities.
 ## Current Tools
 
 - `Lazy Frame Rename`
+- `Render Manager`
 - `Split By Context`
 
 ## Run
@@ -33,6 +34,7 @@ src/
   BlenderToolbox.App/
   BlenderToolbox.Core/
   BlenderToolbox.Tools.LazyFrameRename/
+  BlenderToolbox.Tools.RenderManager/
   BlenderToolbox.Tools.SplitByContext/
 
 tests/
@@ -45,4 +47,3 @@ tests/
 - Keep UI simple and maintainable.
 - Prefer vertical slices over speculative architecture.
 - Move shared logic to `Core` only when at least two tools need it.
-

@@ -4,6 +4,8 @@ public sealed class BlendInspectionSnapshot
 {
     public List<string> AvailableCameras { get; set; } = [];
 
+    public List<string> AvailableCollections { get; set; } = [];
+
     public List<string> AvailableScenes { get; set; } = [];
 
     public List<string> AvailableViewLayers { get; set; } = [];
@@ -25,6 +27,8 @@ public sealed class BlendInspectionSnapshot
     public string ResolvedOutputPath { get; set; } = string.Empty;
 
     public Dictionary<string, List<string>> SceneCameras { get; set; } = [];
+
+    public Dictionary<string, List<string>> SceneCollections { get; set; } = [];
 
     public string SceneName { get; set; } = string.Empty;
 
