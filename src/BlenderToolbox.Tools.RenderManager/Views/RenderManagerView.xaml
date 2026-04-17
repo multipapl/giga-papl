@@ -86,6 +86,65 @@
             <Setter Property="FontWeight" Value="SemiBold" />
             <Setter Property="Content" Value="↺" />
         </Style>
+        <Style x:Key="LogHeaderToggleStyle"
+               TargetType="ToggleButton">
+            <Setter Property="Width" Value="26" />
+            <Setter Property="Height" Value="26" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Background" Value="{DynamicResource TextForegroundBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource TextForegroundBrush}" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Focusable" Value="False" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToggleButton">
+                        <Border x:Name="ToggleChrome"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="13">
+                            <Path x:Name="Chevron"
+                                  Width="10"
+                                  Height="6"
+                                  HorizontalAlignment="Center"
+                                  VerticalAlignment="Center"
+                                  Data="M 0 5 L 5 0 L 10 5"
+                                  RenderTransformOrigin="0.5,0.5"
+                                  Stroke="{DynamicResource WindowBackgroundBrush}"
+                                  StrokeEndLineCap="Round"
+                                  StrokeLineJoin="Round"
+                                  StrokeStartLineCap="Round"
+                                  StrokeThickness="2">
+                                <Path.RenderTransform>
+                                    <RotateTransform Angle="0" />
+                                </Path.RenderTransform>
+                            </Path>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="False">
+                                <Setter TargetName="Chevron"
+                                        Property="RenderTransform">
+                                    <Setter.Value>
+                                        <RotateTransform Angle="180" />
+                                    </Setter.Value>
+                                </Setter>
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="ToggleChrome"
+                                        Property="Opacity"
+                                        Value="0.88" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="ToggleChrome"
+                                        Property="Opacity"
+                                        Value="0.75" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
     </UserControl.Resources>
 
     <Grid>
@@ -873,27 +932,40 @@
 
         <Border Grid.Row="4"
                 Style="{StaticResource PanelCardStyle}"
-                Padding="12">
-            <Expander HorizontalContentAlignment="Stretch"
-                      IsExpanded="{Binding LogsExpanded, Mode=TwoWay}"
+                Padding="18">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+                <Grid Grid.Row="0"
                       ToolTip="Show or hide render logs for the selected job.">
-                <Expander.Header>
-                    <DockPanel LastChildFill="False"
-                               Width="{Binding ActualWidth, RelativeSource={RelativeSource AncestorType=ContentPresenter}}">
-                        <TextBlock DockPanel.Dock="Left"
-                                   Style="{StaticResource SectionTitleTextStyle}"
-                                   Foreground="{DynamicResource TextForegroundBrush}"
-                                   Text="Logs" />
-                        <Button DockPanel.Dock="Right"
-                                Margin="14,0,0,0"
-                                Padding="12,6"
-                                Style="{StaticResource SecondaryButtonStyle}"
-                                Command="{Binding OpenSelectedLogFileCommand}"
-                                Content="Open Log File"
-                                ToolTip="Open the latest log file for the selected job." />
-                    </DockPanel>
-                </Expander.Header>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="26" />
+                        <ColumnDefinition Width="14" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <ToggleButton Grid.Column="0"
+                                  VerticalAlignment="Center"
+                                  Style="{StaticResource LogHeaderToggleStyle}"
+                                  IsChecked="{Binding LogsExpanded, Mode=TwoWay}" />
+                    <TextBlock Grid.Column="2"
+                               VerticalAlignment="Center"
+                               Style="{StaticResource SectionTitleTextStyle}"
+                               Foreground="{DynamicResource TextForegroundBrush}"
+                               Text="Logs" />
+                    <Button Grid.Column="3"
+                            Margin="14,0,0,0"
+                            Padding="12,6"
+                            VerticalAlignment="Center"
+                            Style="{StaticResource SecondaryButtonStyle}"
+                            Command="{Binding OpenSelectedLogFileCommand}"
+                            Content="Open Log File"
+                            ToolTip="Open the latest log file for the selected job." />
+                </Grid>
                 <TextBox x:Name="LogTextBox"
+                         Grid.Row="1"
                          Margin="0,12,0,0"
                          Height="210"
                          AcceptsReturn="True"
@@ -902,8 +974,9 @@
                          TextChanged="LogTextBox_TextChanged"
                          ToolTip="Render output log for the selected job."
                          TextWrapping="Wrap"
-                         VerticalScrollBarVisibility="Auto" />
-            </Expander>
+                         VerticalScrollBarVisibility="Auto"
+                         Visibility="{Binding LogsExpanded, Converter={StaticResource BoolToVis}}" />
+            </Grid>
         </Border>
     </Grid>
 </UserControl>

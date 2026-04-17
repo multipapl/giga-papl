@@ -18,13 +18,7 @@ public partial class JobRendersetViewModel : ObservableObject
 
     public ObservableCollection<RendersetContextViewModel> Contexts { get; } = [];
 
-    public IReadOnlyList<string> SelectedContextNames => Contexts.Count == 0
-        ? _selectedContextNames
-        : Contexts
-            .Where(static context => context.IsSelected)
-            .Select(static context => context.Name)
-            .Where(static name => !string.IsNullOrWhiteSpace(name))
-            .ToList();
+    public IReadOnlyList<string> SelectedContextNames => _selectedContextNames;
 
     public bool HasContexts => Contexts.Count > 0;
 
@@ -102,6 +96,7 @@ public partial class JobRendersetViewModel : ObservableObject
             .Distinct(StringComparer.Ordinal)
             .ToList();
         _hasExplicitSelection = hasExplicitSelection || _selectedContextNames.Count > 0;
+        OnPropertyChanged(nameof(SelectedContextNames));
     }
 
     public void ResetRuntimeContextProgress()
@@ -154,6 +149,7 @@ public partial class JobRendersetViewModel : ObservableObject
             }
         }
 
+        SyncSelectedContextNames();
         NotifyContextCollectionChanged();
     }
 
@@ -169,8 +165,16 @@ public partial class JobRendersetViewModel : ObservableObject
 
     private void SyncSelectedContextNames()
     {
-        _selectedContextNames = SelectedContextNames.ToList();
-        OnPropertyChanged(nameof(SelectedContextNames));
+        _selectedContextNames = ComputeSelectedContextNames();
+    }
+
+    private List<string> ComputeSelectedContextNames()
+    {
+        return Contexts
+            .Where(static context => context.IsSelected)
+            .Select(static context => context.Name)
+            .Where(static name => !string.IsNullOrWhiteSpace(name))
+            .ToList();
     }
 
     private void NotifyContextCollectionChanged()

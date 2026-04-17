@@ -1,6 +1,7 @@
 using BlenderToolbox.Tools.RenderManager.Models;
 using BlenderToolbox.Tools.RenderManager.Services;
 using BlenderToolbox.Tools.RenderManager.ViewModels;
+using BlenderToolbox.Tools.RenderManager.ViewModels.Jobs;
 
 namespace BlenderToolbox.Core.Tests;
 
@@ -268,5 +269,109 @@ public sealed class RenderManagerTests
 
         Assert.Equal("Camera_A", job.CameraName);
         Assert.Contains("is not in scene", job.CameraHint);
+    }
+
+    [Fact]
+    public void JobRendersetViewModel_UpdatesSelectedContextNamesWhenContextsMutateDirectly()
+    {
+        var renderset = new JobRendersetViewModel();
+        var contextA = new RendersetContextViewModel(
+            new RendersetContextSnapshot { Index = 0, Name = "Context A" },
+            isSelected: true);
+        var contextB = new RendersetContextViewModel(
+            new RendersetContextSnapshot { Index = 1, Name = "Context B" },
+            isSelected: false);
+
+        renderset.Contexts.Add(contextA);
+        renderset.Contexts.Add(contextB);
+
+        Assert.Equal(["Context A"], renderset.SelectedContextNames);
+
+        contextB.IsSelected = true;
+        renderset.Contexts.Remove(contextA);
+
+        Assert.Equal(["Context B"], renderset.SelectedContextNames);
+    }
+
+    [Fact]
+    public void RenderPreviewFileFinder_ReturnsLatestTopLevelPreviewableFile()
+    {
+        using var temp = new TempDirectoryScope();
+        var oldPreview = Path.Combine(temp.RootPath, "old.png");
+        var latestPreview = Path.Combine(temp.RootPath, "latest.exr");
+        var ignoredFile = Path.Combine(temp.RootPath, "notes.txt");
+        File.WriteAllText(oldPreview, "old");
+        File.WriteAllText(latestPreview, "latest");
+        File.WriteAllText(ignoredFile, "ignored");
+        File.SetLastWriteTimeUtc(oldPreview, new DateTime(2024, 01, 01, 0, 0, 0, DateTimeKind.Utc));
+        File.SetLastWriteTimeUtc(latestPreview, new DateTime(2024, 01, 02, 0, 0, 0, DateTimeKind.Utc));
+
+        var preview = RenderPreviewFileFinder.FindLatestPreviewableFile([temp.RootPath]);
+
+        Assert.Equal(latestPreview, preview);
+    }
+
+    [Fact]
+    public void RenderPreviewFileFinder_UsesRecursiveFallbackWhenTopLevelHasNoPreview()
+    {
+        using var temp = new TempDirectoryScope();
+        var nestedFolder = Path.Combine(temp.RootPath, "nested");
+        Directory.CreateDirectory(nestedFolder);
+        File.WriteAllText(Path.Combine(temp.RootPath, "notes.txt"), "ignored");
+        var nestedPreview = Path.Combine(nestedFolder, "frame.png");
+        File.WriteAllText(nestedPreview, "preview");
+
+        var preview = RenderPreviewFileFinder.FindLatestPreviewableFile([temp.RootPath]);
+
+        Assert.Equal(nestedPreview, preview);
+    }
+
+    [Fact]
+    public void BlendInspectionService_CanReuseInspectionWhenBlendFileSizeAndTimestampMatch()
+    {
+        using var temp = new TempDirectoryScope();
+        var blendPath = Path.Combine(temp.RootPath, "scene.blend");
+        var lastWriteUtc = new DateTime(2024, 01, 01, 12, 0, 0, DateTimeKind.Utc);
+        File.WriteAllText(blendPath, "blend");
+        File.SetLastWriteTimeUtc(blendPath, lastWriteUtc);
+        var info = new FileInfo(blendPath);
+        var snapshot = new BlendInspectionSnapshot
+        {
+            BlendFileSizeBytes = info.Length,
+            BlendFileLastWriteUtc = lastWriteUtc,
+        };
+
+        Assert.True(BlendInspectionService.CanReuseInspection(snapshot, blendPath));
+
+        File.AppendAllText(blendPath, "changed");
+        File.SetLastWriteTimeUtc(blendPath, lastWriteUtc.AddMinutes(1));
+
+        Assert.False(BlendInspectionService.CanReuseInspection(snapshot, blendPath));
+    }
+
+    private sealed class TempDirectoryScope : IDisposable
+    {
+        public TempDirectoryScope()
+        {
+            RootPath = Path.Combine(Path.GetTempPath(), "giga-papl-tests", Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(RootPath);
+        }
+
+        public string RootPath { get; }
+
+        public void Dispose()
+        {
+            try
+            {
+                if (Directory.Exists(RootPath))
+                {
+                    Directory.Delete(RootPath, recursive: true);
+                }
+            }
+            catch
+            {
+                // Best effort cleanup for test temp files.
+            }
+        }
     }
 }

@@ -18,6 +18,39 @@ public sealed class BlendInspectionService
         _paths = paths;
     }
 
+    public static bool CanReuseInspection(BlendInspectionSnapshot? snapshot, string blendFilePath)
+    {
+        if (snapshot?.BlendFileLastWriteUtc is not { } inspectedLastWriteUtc)
+        {
+            return false;
+        }
+
+        if (string.IsNullOrWhiteSpace(blendFilePath))
+        {
+            return false;
+        }
+
+        try
+        {
+            var blendInfo = new FileInfo(blendFilePath.Trim());
+            if (!blendInfo.Exists)
+            {
+                return false;
+            }
+
+            return snapshot.BlendFileSizeBytes == blendInfo.Length
+                   && inspectedLastWriteUtc.UtcDateTime == blendInfo.LastWriteTimeUtc;
+        }
+        catch (IOException)
+        {
+            return false;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return false;
+        }
+    }
+
     public async Task<BlendInspectionSnapshot> InspectAsync(
         string blenderExecutablePath,
         string blendFilePath,

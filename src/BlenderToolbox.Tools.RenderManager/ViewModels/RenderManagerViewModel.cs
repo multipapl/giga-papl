@@ -1300,7 +1300,7 @@ public partial class RenderManagerViewModel : ObservableObject
             job.LastKnownOutputFolderPath = trimmed;
         }
 
-        var previewPath = FindLatestPreviewableFile(new[] { trimmed });
+        var previewPath = RenderPreviewFileFinder.FindLatestPreviewableFile(new[] { trimmed });
         if (string.IsNullOrWhiteSpace(previewPath))
         {
             return;
@@ -1321,7 +1321,7 @@ public partial class RenderManagerViewModel : ObservableObject
             job.LastKnownOutputFolderPath = outputFolder;
         }
 
-        var previewPath = FindLatestPreviewableFile(folders);
+        var previewPath = RenderPreviewFileFinder.FindLatestPreviewableFile(folders);
         if (string.IsNullOrWhiteSpace(previewPath))
         {
             if (!string.IsNullOrWhiteSpace(job.LastKnownOutputFolderPath))
@@ -1347,32 +1347,6 @@ public partial class RenderManagerViewModel : ObservableObject
             .OrderByDescending(static folder => Directory.Exists(folder) ? Directory.GetLastWriteTimeUtc(folder) : DateTime.MinValue)
             .FirstOrDefault()
             ?? string.Empty;
-    }
-
-    private static string FindLatestPreviewableFile(IReadOnlyList<string> folders)
-    {
-        var candidates = folders
-            .Where(static folder => !string.IsNullOrWhiteSpace(folder) && Directory.Exists(folder.Trim()))
-            .SelectMany(static folder => Directory.EnumerateFiles(folder.Trim(), "*.*", SearchOption.AllDirectories))
-            .Where(IsPreviewableImagePath)
-            .Select(static path => new FileInfo(path))
-            .Where(static info => info.Exists)
-            .OrderByDescending(static info => info.LastWriteTimeUtc)
-            .FirstOrDefault();
-
-        return candidates?.FullName ?? string.Empty;
-    }
-
-    private static bool IsPreviewableImagePath(string path)
-    {
-        var extension = Path.GetExtension(path);
-        return extension.Equals(".png", StringComparison.OrdinalIgnoreCase)
-               || extension.Equals(".jpg", StringComparison.OrdinalIgnoreCase)
-               || extension.Equals(".jpeg", StringComparison.OrdinalIgnoreCase)
-               || extension.Equals(".tif", StringComparison.OrdinalIgnoreCase)
-               || extension.Equals(".tiff", StringComparison.OrdinalIgnoreCase)
-               || extension.Equals(".bmp", StringComparison.OrdinalIgnoreCase)
-               || extension.Equals(".exr", StringComparison.OrdinalIgnoreCase);
     }
 
     private static int ComputeContextFrameCount(RendersetRenderEvent rendersetEvent)
@@ -1480,8 +1454,31 @@ public partial class RenderManagerViewModel : ObservableObject
 
     private async Task TryInspectJobAsync(RenderQueueItemViewModel job, string? successStatusMessage)
     {
-        if (string.IsNullOrWhiteSpace(job.BlendFilePath) || !File.Exists(job.BlendFilePath.Trim()))
+        var blendFilePath = job.BlendFilePath?.Trim() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(blendFilePath) || !File.Exists(blendFilePath))
         {
+            return;
+        }
+
+        if (BlendInspectionService.CanReuseInspection(job.Inspection, blendFilePath))
+        {
+            var cachedInspection = job.Inspection!;
+            job.ApplyInspection(cachedInspection);
+            if (job.Status != RenderJobStatus.Rendering)
+            {
+                job.Status = RenderJobStatus.Ready;
+            }
+
+            AppendLog(
+                job,
+                $"Reused cached blend defaults | Scene: {DisplayOrPlaceholder(cachedInspection.SceneName, "n/a")} | Camera: {DisplayOrPlaceholder(cachedInspection.CameraName, "n/a")} | View Layer: {DisplayOrPlaceholder(cachedInspection.ViewLayerName, "n/a")} | Format: {DisplayOrPlaceholder(cachedInspection.OutputFormat, "n/a")} | RenderSet contexts: {cachedInspection.Renderset.Contexts.Count}");
+
+            if (!string.IsNullOrWhiteSpace(successStatusMessage))
+            {
+                SetStatus("Blend defaults are up to date.", StatusTone.Success);
+            }
+
+            RefreshComputedState();
             return;
         }
 
@@ -1508,7 +1505,7 @@ public partial class RenderManagerViewModel : ObservableObject
                 RefreshComputedState();
             }
 
-            var inspection = await _blendInspectionService.InspectAsync(blenderPath, job.BlendFilePath.Trim(), inspectionToken);
+            var inspection = await _blendInspectionService.InspectAsync(blenderPath, blendFilePath, inspectionToken);
             job.ApplyInspection(inspection);
 
             if (canShowInspectingStatus)
