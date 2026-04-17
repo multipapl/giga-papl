@@ -951,6 +951,8 @@ public partial class RenderManagerViewModel : ObservableObject
             return;
         }
 
+        var parseRendersetMarkers = plan.UsesRenderset;
+
         var stdoutTask = Task.Run(async () =>
         {
             try
@@ -958,7 +960,7 @@ public partial class RenderManagerViewModel : ObservableObject
                 while (await process.StandardOutput.ReadLineAsync(ct) is { } line)
                 {
                     var progress = BlenderOutputParser.TryParse(line);
-                    var rendersetEvent = RendersetOutputParser.TryParse(line);
+                    var rendersetEvent = parseRendersetMarkers ? RendersetOutputParser.TryParse(line) : null;
                     PostToUi(() => HandleProcessOutputLine(job, line, progress, rendersetEvent, progressContext, stopwatch));
                 }
             }
@@ -974,7 +976,7 @@ public partial class RenderManagerViewModel : ObservableObject
                 while (await process.StandardError.ReadLineAsync(ct) is { } line)
                 {
                     var progress = BlenderOutputParser.TryParse(line);
-                    var rendersetEvent = RendersetOutputParser.TryParse(line);
+                    var rendersetEvent = parseRendersetMarkers ? RendersetOutputParser.TryParse(line) : null;
                     PostToUi(() => HandleProcessOutputLine(job, line, progress, rendersetEvent, progressContext, stopwatch));
                 }
             }

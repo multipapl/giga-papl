@@ -1,4 +1,3 @@
-using System.Text;
 using System.Text.Json;
 
 namespace BlenderToolbox.Tools.RenderManager.Services;

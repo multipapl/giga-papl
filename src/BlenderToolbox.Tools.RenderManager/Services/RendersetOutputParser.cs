@@ -41,8 +41,17 @@ public static class RendersetOutputParser
             return new RendersetRenderEvent { Kind = kind };
         }
 
-        var parsed = JsonSerializer.Deserialize<RendersetRenderEvent>(json, Options)
-                     ?? new RendersetRenderEvent();
+        RendersetRenderEvent? parsed;
+        try
+        {
+            parsed = JsonSerializer.Deserialize<RendersetRenderEvent>(json, Options);
+        }
+        catch (JsonException)
+        {
+            return new RendersetRenderEvent { Kind = kind };
+        }
+
+        parsed ??= new RendersetRenderEvent();
         parsed.Kind = kind;
         return parsed;
     }

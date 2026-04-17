@@ -874,10 +874,12 @@
         <Border Grid.Row="4"
                 Style="{StaticResource PanelCardStyle}"
                 Padding="12">
-            <Expander IsExpanded="{Binding LogsExpanded, Mode=TwoWay}"
+            <Expander HorizontalContentAlignment="Stretch"
+                      IsExpanded="{Binding LogsExpanded, Mode=TwoWay}"
                       ToolTip="Show or hide render logs for the selected job.">
                 <Expander.Header>
-                    <DockPanel LastChildFill="False">
+                    <DockPanel LastChildFill="False"
+                               Width="{Binding ActualWidth, RelativeSource={RelativeSource AncestorType=ContentPresenter}}">
                         <TextBlock DockPanel.Dock="Left"
                                    Style="{StaticResource SectionTitleTextStyle}"
                                    Foreground="{DynamicResource TextForegroundBrush}"
